@@ -46,31 +46,34 @@ function LevelMeter({ level, recording }: { level: number; recording: boolean })
 
 function MicrophonePicker({ mic, disabled }: { mic: ReturnType<typeof useMicrophone>; disabled: boolean }) {
   return (
-    <div className="grid gap-2">
+    // min-w-0: a long device name must not stretch the grid column (it overlapped the next field).
+    <div className="grid min-w-0 gap-2 sm:col-span-3">
       <Label htmlFor="live-mic" className="flex items-center gap-1.5">
         <Mic className="size-3.5" /> Microfone
       </Label>
-      <div className="flex gap-2">
-        <select
-          id="live-mic"
-          value={mic.deviceId}
-          disabled={disabled || mic.status === "requesting" || !mic.devices.length}
-          onChange={(event) => mic.choose(event.target.value)}
-          className="h-9 min-w-0 flex-1 rounded-lg border bg-background px-3 text-sm disabled:opacity-60"
-        >
-          {!mic.devices.length && <option value="">{mic.status === "requesting" ? "Abrindo o microfone…" : "Nenhum microfone encontrado"}</option>}
-          {mic.devices.map((device) => (
-            <option key={device.id} value={device.id}>{device.label}</option>
-          ))}
-        </select>
-        <Button variant="outline" size="icon" disabled={disabled || !!mic.scanning} onClick={() => void mic.retry()} title="Reabrir o microfone" aria-label="Reabrir o microfone">
-          <RefreshCw className={cn(mic.status === "requesting" && "animate-spin")} />
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
+        <div className="flex min-w-0 flex-1 gap-2">
+          <select
+            id="live-mic"
+            value={mic.deviceId}
+            disabled={disabled || mic.status === "requesting" || !mic.devices.length}
+            onChange={(event) => mic.choose(event.target.value)}
+            className="h-9 w-full min-w-0 flex-1 truncate rounded-lg border bg-background px-3 text-sm disabled:opacity-60"
+          >
+            {!mic.devices.length && <option value="">{mic.status === "requesting" ? "Abrindo o microfone…" : "Nenhum microfone encontrado"}</option>}
+            {mic.devices.map((device) => (
+              <option key={device.id} value={device.id}>{device.label}</option>
+            ))}
+          </select>
+          <Button variant="outline" size="icon" className="size-9 shrink-0" disabled={disabled || !!mic.scanning} onClick={() => void mic.retry()} title="Reabrir o microfone" aria-label="Reabrir o microfone">
+            <RefreshCw className={cn(mic.status === "requesting" && "animate-spin")} />
+          </Button>
+        </div>
+        <Button variant="secondary" className="h-9 shrink-0" disabled={disabled || !!mic.scanning} onClick={() => void mic.scan()}>
+          {mic.scanning ? <Loader2 className="animate-spin" /> : <ScanSearch />}
+          {mic.scanning ? `Testando ${mic.scanning.index} de ${mic.scanning.total}: fale sem parar…` : "Encontrar meu microfone"}
         </Button>
       </div>
-      <Button variant="secondary" size="sm" className="w-fit" disabled={disabled || !!mic.scanning} onClick={() => void mic.scan()}>
-        {mic.scanning ? <Loader2 className="animate-spin" /> : <ScanSearch />}
-        {mic.scanning ? `Testando ${mic.scanning.index} de ${mic.scanning.total}: fale sem parar…` : "Encontrar meu microfone"}
-      </Button>
       {mic.scanning && <p className="truncate text-xs text-muted-foreground">Ouvindo: {mic.scanning.label}</p>}
       {mic.scanResults && !mic.scanning && <ScanResults results={mic.scanResults} chosen={mic.deviceId} />}
     </div>
@@ -179,17 +182,16 @@ export function LivePage() {
 
       {!busy && (
         <Card>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
+          <CardContent className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_160px]">
+            <div className="grid min-w-0 gap-2">
               <Label htmlFor="live-title">Título</Label>
               <Input id="live-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Reunião presencial" />
             </div>
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2">
               <Label htmlFor="live-people">Participantes</Label>
               <Input id="live-people" value={participants} onChange={(e) => setParticipants(e.target.value)} placeholder="Ana, Bruno" />
             </div>
-            <MicrophonePicker mic={mic} disabled={busy} />
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2">
               <Label htmlFor="live-language">Idioma falado</Label>
               <select
                 id="live-language"
@@ -200,6 +202,7 @@ export function LivePage() {
                 {languages.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </div>
+            <MicrophonePicker mic={mic} disabled={busy} />
           </CardContent>
         </Card>
       )}
