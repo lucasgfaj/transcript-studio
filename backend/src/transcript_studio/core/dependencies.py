@@ -8,12 +8,16 @@ from fastapi import Depends, Request
 from sqlmodel import Session
 
 from transcript_studio.core.config import Settings
+from transcript_studio.core.container import Container
 from transcript_studio.infrastructure.audio_storage import FileAudioStorage
 from transcript_studio.infrastructure.ollama_client import OllamaClient
 from transcript_studio.infrastructure.waveform import CachedWaveform
-from transcript_studio.repositories.sql import SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository
+from transcript_studio.repositories.sql import (
+    SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository,
+)
 from transcript_studio.services.documents import MinutesService, TranscriptService
 from transcript_studio.services.meetings import MeetingService
+from transcript_studio.services.transcription import JobService
 
 
 def get_settings(request: Request) -> Settings:
@@ -56,3 +60,17 @@ def get_ollama(settings: SettingsDep) -> OllamaClient:
 TranscriptServiceDep = Annotated[TranscriptService, Depends(get_transcript_service)]
 MinutesServiceDep = Annotated[MinutesService, Depends(get_minutes_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama)]
+
+
+def get_container(request: Request) -> Container:
+    return request.app.state.container
+
+
+ContainerDep = Annotated[Container, Depends(get_container)]
+
+
+def get_job_service(session: SessionDep, meetings: MeetingServiceDep, container: ContainerDep) -> JobService:
+    return JobService(SqlJobRepository(session), meetings, container.worker.submit, container.worker.cancel)
+
+
+JobServiceDep = Annotated[JobService, Depends(get_job_service)]

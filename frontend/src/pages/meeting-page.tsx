@@ -24,12 +24,18 @@ import { ChatPanel } from "@/components/meetings/chat-panel"
 import { MeetingDetailsDialog } from "@/components/meetings/meeting-details-dialog"
 import { MinutesPanel } from "@/components/meetings/minutes-panel"
 import { StatusBadge } from "@/components/meetings/status-badge"
+import { TranscribeBar } from "@/components/meetings/transcribe-bar"
 import { TranscriptPanel } from "@/components/meetings/transcript-panel"
+import { useTranscription } from "@/hooks/use-transcription"
 import { useDeleteAudio, useDeleteMeeting, useInvalidateMeeting, useMeeting, usePeaks } from "@/hooks/use-meetings"
 import { api, type Meeting } from "@/lib/api"
 import { formatBytes, formatDate, formatDuration } from "@/lib/format"
 
-function AudioCard({ meeting, playerRef }: { meeting: Meeting; playerRef: React.RefObject<AudioPlayerHandle | null> }) {
+function AudioCard({ meeting, playerRef, onTime }: {
+  meeting: Meeting
+  playerRef: React.RefObject<AudioPlayerHandle | null>
+  onTime: (seconds: number) => void
+}) {
   const version = meeting.has_audio ? `${meeting.audio_size}-${meeting.updated_at}` : null
   const { data: peaks } = usePeaks(meeting.id, version)
   const invalidate = useInvalidateMeeting()
@@ -62,7 +68,7 @@ function AudioCard({ meeting, playerRef }: { meeting: Meeting; playerRef: React.
   return (
     <Card>
       <CardContent>
-        <AudioPlayer ref={playerRef} src={api.audioUrl(meeting.id, version)} peaks={peaks} duration={meeting.audio_duration ?? 0} />
+        <AudioPlayer ref={playerRef} src={api.audioUrl(meeting.id, version)} peaks={peaks} duration={meeting.audio_duration ?? 0} onTime={onTime} />
       </CardContent>
     </Card>
   )
@@ -80,6 +86,9 @@ export function MeetingPage() {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [replacing, setReplacing] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [tab, setTab] = useState<string | null>(null)
+  const transcription = useTranscription(id)
 
   if (isLoading) {
     return (
@@ -186,9 +195,14 @@ export function MeetingPage() {
         </div>
       </div>
 
-      <AudioCard meeting={meeting} playerRef={playerRef} />
+      <AudioCard meeting={meeting} playerRef={playerRef} onTime={setCurrentTime} />
 
-      <Tabs defaultValue={meeting.has_minutes ? "minutes" : "transcript"}>
+      {meeting.has_audio && <TranscribeBar transcription={transcription} hasTranscript={meeting.has_transcript} />}
+
+      <Tabs
+        value={transcription.active ? "transcript" : tab ?? (meeting.has_minutes ? "minutes" : "transcript")}
+        onValueChange={setTab}
+      >
         <TabsList variant="line" className="w-full justify-start border-b pb-0">
           <TabsTrigger value="transcript">
             <FileText /> Transcrição
@@ -201,7 +215,12 @@ export function MeetingPage() {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="transcript" className="pt-4">
-          <TranscriptPanel meetingId={meeting.id} onSeek={(seconds) => playerRef.current?.seek(seconds)} />
+          <TranscriptPanel
+            meetingId={meeting.id}
+            onSeek={(seconds) => playerRef.current?.seek(seconds)}
+            currentTime={currentTime}
+            liveSegments={transcription.liveSegments}
+          />
         </TabsContent>
         <TabsContent value="minutes" className="pt-4">
           <MinutesPanel meetingId={meeting.id} title={meeting.title} />

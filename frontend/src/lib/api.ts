@@ -65,7 +65,44 @@ export interface Health {
   ollama: boolean
   ollama_version: string | null
   default_llm: string
+  whisper_model: string
+  gpu_job: string | null
+  queued_jobs: number
 }
+
+export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled"
+export type TranscriptionMode = "fast" | "detailed"
+
+export interface Job {
+  id: string
+  meeting_id: string
+  kind: "transcribe"
+  status: JobStatus
+  params: { language?: string | null; mode?: TranscriptionMode }
+  progress: number
+  message: string | null
+  error: string | null
+  audio_seconds: number | null
+  elapsed_seconds: number | null
+  device: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface LiveSegment {
+  start: number
+  end: number
+  text: string
+}
+
+export type JobEvent =
+  | { type: "snapshot"; job: Job; segments: LiveSegment[] }
+  | { type: "status"; status: JobStatus; message: string }
+  | { type: "segments"; segments: LiveSegment[]; progress: number }
+  | { type: "done" | "error" | "cancelled"; job: Job }
+
+export const isActive = (job: Job | null | undefined) => job?.status === "queued" || job?.status === "running"
 
 export class ApiError extends Error {
   readonly status: number
@@ -150,6 +187,12 @@ export const api = {
   transcript: (id: string) => request<Transcript>(`/api/meetings/${id}/transcript`),
   saveTranscript: (id: string, text: string) =>
     request<Transcript>(`/api/meetings/${id}/transcript`, { method: "PUT", body: JSON.stringify({ text }) }),
+
+  transcribe: (id: string, options: { mode: TranscriptionMode; language: string | null }) =>
+    request<Job>(`/api/meetings/${id}/transcribe`, { method: "POST", body: JSON.stringify(options) }),
+  latestJob: (id: string) => request<Job | null>(`/api/meetings/${id}/job`),
+  cancelJob: (jobId: string) => request<Job>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
+  jobEventsUrl: (jobId: string) => `/api/jobs/${jobId}/events`,
 
   minutes: (id: string) => request<MinutesBundle>(`/api/meetings/${id}/minutes`),
   saveMinutes: (id: string, markdown: string) =>

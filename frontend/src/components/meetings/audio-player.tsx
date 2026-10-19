@@ -24,11 +24,13 @@ export function AudioPlayer({
   src,
   peaks,
   duration,
+  onTime,
   ref,
 }: {
   src: string
   peaks: number[] | undefined
   duration: number
+  onTime?: (seconds: number) => void
   ref?: Ref<AudioPlayerHandle>
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,7 +90,10 @@ export function AudioPlayer({
         preload="metadata"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={(event) => setTime(event.currentTarget.currentTime)}
+        onTimeUpdate={(event) => {
+          setTime(event.currentTarget.currentTime)
+          onTime?.(event.currentTarget.currentTime)
+        }}
       />
       {peaks ? <div ref={containerRef} className="w-full cursor-pointer" /> : <Skeleton className="h-16 w-full" />}
       <div className="flex items-center gap-1 sm:gap-2">

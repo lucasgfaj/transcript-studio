@@ -2,7 +2,24 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)** e **1 (banco, CRUD, áudio e importação)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)** e **2 (transcrição na GPU)**.
+
+## Transcrição (fase 2)
+
+Na página da reunião, escolha o modo e clique em **Transcrever**. O texto aparece enquanto o Whisper trabalha, cada trecho com o horário dele. Clicar no horário pula o áudio para ali, e o trecho que está tocando fica destacado.
+
+Medido no seu notebook (RTX 4050 6 GB, `large-v3-turbo` com `int8_float16`):
+
+| Modo | Como funciona | Reunião de 32 min | Reunião de 70 min |
+| --- | --- | --- | --- |
+| **Rápido** (padrão) | Lote de 16 janelas por vez; trechos de até ~30 s | 26 s (75x) | 82 s (51x, incluindo preparar o áudio) |
+| **Detalhado** | Sequencial, frase a frase (~3 s por trecho) | 59 s (32x) | ~2 min 10 s (estimado) |
+
+Como fica rápido:
+- **Fila única de GPU** (`services/gpu_worker.py`): um trabalho por vez, e antes de transcrever o Ollama é mandado descarregar os modelos (`keep_alive: 0`). Com os dois juntos na GPU de 6 GB, a transcrição ficava mais de 100x mais lenta.
+- **Whisper pré-carregado** quando o servidor sobe (`STUDIO_WHISPER_PRELOAD=true`): a primeira tarefa cai de ~35 s para ~3 s.
+- **Modo em lote** do faster-whisper (`STUDIO_WHISPER_BATCH_SIZE=16`; 24 não ganhou nada).
+- **Retomada:** tarefas interrompidas por um reinício voltam para a fila sozinhas.
 
 ## Como rodar
 
@@ -70,7 +87,7 @@ backend/src/transcript_studio/
 - `data/meetings/<id>/audio.<ext>`: o áudio original, mais o cache da forma de onda.
 - `data/` fica fora do Git porque contém o conteúdo das reuniões.
 
-## API (fase 1)
+## API
 
 | Método | Rota |
 | --- | --- |
@@ -81,6 +98,10 @@ backend/src/transcript_studio/
 | GET | `/api/meetings/{id}/audio/peaks` |
 | GET / PUT | `/api/meetings/{id}/transcript` |
 | GET / PUT | `/api/meetings/{id}/minutes` (cada PUT vira uma nova versão) |
-| GET | `/api/health` (status do Ollama) |
+| POST | `/api/meetings/{id}/transcribe` (`{"mode": "fast"\|"detailed", "language": "pt"}`; 409 se já houver uma tarefa) |
+| GET | `/api/meetings/{id}/job` (última tarefa da reunião) |
+| GET | `/api/jobs`, `/api/jobs/{id}`; POST `/api/jobs/{id}/cancel` |
+| GET | `/api/jobs/{id}/events` (SSE: snapshot, status, segments, done/error/cancelled) |
+| GET | `/api/health` (status do Ollama e da fila de GPU) |
 
 A documentação interativa fica em http://localhost:8000/docs.

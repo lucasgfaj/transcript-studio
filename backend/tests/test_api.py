@@ -1,39 +1,10 @@
 from __future__ import annotations
 
-import io
-import math
-import struct
-import wave
-from collections.abc import Iterator
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
 from transcript_studio.core.config import Settings
-from transcript_studio.main import create_app
-
-
-def make_wav(seconds: float = 1.0, rate: int = 16_000) -> bytes:
-    buffer = io.BytesIO()
-    with wave.open(buffer, "wb") as output:
-        output.setnchannels(1)
-        output.setsampwidth(2)
-        output.setframerate(rate)
-        frames = (int(8000 * math.sin(2 * math.pi * 440 * i / rate)) for i in range(int(seconds * rate)))
-        output.writeframes(b"".join(struct.pack("<h", frame) for frame in frames))
-    return buffer.getvalue()
-
-
-@pytest.fixture
-def settings(tmp_path: Path) -> Settings:
-    return Settings(data_dir=tmp_path / "data", frontend_dist=tmp_path / "no-dist", ollama_url="http://127.0.0.1:9")
-
-
-@pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
-    with TestClient(create_app(settings)) as test_client:
-        yield test_client
+from tests.conftest import make_wav
 
 
 def test_meeting_crud(client: TestClient) -> None:

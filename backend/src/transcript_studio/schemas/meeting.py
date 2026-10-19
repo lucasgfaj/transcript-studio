@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from datetime import date as Date, datetime
+from typing import Any, Literal
 
 from sqlmodel import Field, SQLModel
 
-from transcript_studio.models import MeetingFields, MeetingSource, MeetingStatus
+from transcript_studio.models import JobKind, JobStatus, MeetingFields, MeetingSource, MeetingStatus
 
 
 class MeetingCreate(MeetingFields):
@@ -77,3 +78,28 @@ class HealthRead(SQLModel):
     ollama: bool
     ollama_version: str | None
     default_llm: str
+    whisper_model: str
+    gpu_job: str | None
+    queued_jobs: int
+
+
+class TranscribeRequest(SQLModel):
+    language: str | None = None
+    mode: Literal["fast", "detailed"] = "fast"
+
+
+class JobRead(SQLModel):
+    id: str
+    meeting_id: str
+    kind: JobKind
+    status: JobStatus
+    params: dict[str, Any]
+    progress: float
+    message: str | None
+    error: str | None
+    audio_seconds: float | None
+    elapsed_seconds: float | None
+    device: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None

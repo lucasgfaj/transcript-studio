@@ -28,6 +28,9 @@ function OllamaStatus() {
       <div className="min-w-0 leading-tight">
         <div className="font-medium text-foreground">Ollama {isLoading ? "…" : online ? "online" : "offline"}</div>
         <div className="truncate">{data?.default_llm ?? "verificando"}</div>
+        <div className="truncate">
+          GPU: {data?.gpu_job ? `ocupada${data.queued_jobs ? ` · ${data.queued_jobs} na fila` : ""}` : "livre"}
+        </div>
       </div>
     </div>
   )

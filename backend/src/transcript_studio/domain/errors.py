@@ -8,3 +8,7 @@ class NotFoundError(DomainError):
 
 class InvalidAudioError(DomainError):
     pass
+
+
+class ConflictError(DomainError):
+    pass

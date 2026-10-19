@@ -10,7 +10,7 @@ from transcript_studio.core.dependencies import build_meeting_service
 from transcript_studio.repositories.sql import SqlMinutesRepository, SqlSegmentRepository
 from transcript_studio.services.documents import MinutesService, TranscriptService
 from transcript_studio.services.importer import import_meetings
-from tests.test_api import make_wav
+from tests.conftest import make_wav
 
 
 def test_imports_legacy_folders_once(tmp_path: Path) -> None:

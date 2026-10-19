@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from sqlalchemy import String, cast
+from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, delete, or_, select
 
-from transcript_studio.models import Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import Job, JobStatus, Meeting, MeetingStatus, Minutes, Segment
 
 
 class SqlMeetingRepository:
@@ -54,6 +55,54 @@ class SqlSegmentRepository:
     def delete_for(self, meeting_id: str) -> None:
         self._session.exec(delete(Segment).where(col(Segment.meeting_id) == meeting_id))
         self._session.commit()
+
+    def replace_for(self, meeting_id: str, segments: list[Segment]) -> None:
+        self._session.exec(delete(Segment).where(col(Segment.meeting_id) == meeting_id))
+        self._session.add_all(segments)
+        self._session.commit()
+
+
+class SqlUnitOfWork:
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+
+    def __enter__(self) -> SqlUnitOfWork:
+        self._session = Session(self._engine)
+        self.jobs = SqlJobRepository(self._session)
+        self.meetings = SqlMeetingRepository(self._session)
+        self.segments = SqlSegmentRepository(self._session)
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._session.close()
+
+
+class SqlJobRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, job_id: str) -> Job | None:
+        return self._session.get(Job, job_id)
+
+    def save(self, job: Job) -> Job:
+        self._session.add(job)
+        self._session.commit()
+        self._session.refresh(job)
+        return job
+
+    def latest_for(self, meeting_id: str) -> Job | None:
+        statement = select(Job).where(Job.meeting_id == meeting_id).order_by(col(Job.created_at).desc())
+        return self._session.exec(statement.limit(1)).first()
+
+    def active_for(self, meeting_id: str) -> Job | None:
+        statement = select(Job).where(Job.meeting_id == meeting_id,
+                                      col(Job.status).in_([JobStatus.queued, JobStatus.running]))
+        return self._session.exec(statement.limit(1)).first()
+
+    def list_active(self) -> list[Job]:
+        statement = (select(Job).where(col(Job.status).in_([JobStatus.queued, JobStatus.running]))
+                     .order_by(col(Job.created_at)))
+        return list(self._session.exec(statement).all())
 
 
 class SqlMinutesRepository:

@@ -12,7 +12,13 @@ export const keys = {
 }
 
 export function useMeetings(q?: string) {
-  return useQuery({ queryKey: keys.meetings(q), queryFn: () => api.listMeetings(q), placeholderData: (previous) => previous })
+  return useQuery({
+    queryKey: keys.meetings(q),
+    queryFn: () => api.listMeetings(q),
+    placeholderData: (previous) => previous,
+    // Keep status badges current while something is being processed on the GPU.
+    refetchInterval: (query) => (query.state.data?.some((m) => m.status === "transcribing" || m.status === "generating") ? 3000 : false),
+  })
 }
 
 export function useMeeting(id: string) {
@@ -37,7 +43,12 @@ export function usePeaks(id: string, version: string | null) {
 }
 
 export function useHealth() {
-  return useQuery({ queryKey: keys.health, queryFn: api.health, refetchInterval: 30_000, retry: false })
+  return useQuery({
+    queryKey: keys.health,
+    queryFn: api.health,
+    refetchInterval: (query) => (query.state.data?.gpu_job ? 3000 : 30_000),
+    retry: false,
+  })
 }
 
 /** Any change to one meeting refreshes it and the library list. */

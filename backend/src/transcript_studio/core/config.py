@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     default_llm: str = "qwen3:8b"
     default_whisper: str = "large-v3-turbo"
+    whisper_preload: bool = True  # load Whisper at startup so the first transcription starts immediately
+    whisper_batch_size: int = 16  # best measured on the RTX 4050 6 GB (24 gave no gain)
     default_language: str = "pt"
 
     @property
