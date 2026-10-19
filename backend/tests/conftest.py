@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import socket
 import math
 import struct
 import threading
@@ -34,6 +35,10 @@ class FakeTranscriber:
     """Emits fixed segments; `gate` pauses after the first one so tests can observe a running job."""
 
     device = "fake"
+    model_name = "large-v3-turbo"
+
+    def set_model(self, name: str) -> None:
+        self.model_name = name
 
     def __init__(self) -> None:
         self.calls: list[tuple[Path, str | None, TranscriptionMode]] = []
@@ -100,8 +105,18 @@ class FakeGpu:
 
 
 @pytest.fixture
-def settings(tmp_path: Path) -> Settings:
-    return Settings(data_dir=tmp_path / "data", frontend_dist=tmp_path / "no-dist", ollama_url="http://127.0.0.1:9")
+def offline_url() -> Iterator[str]:
+    """A port that is bound but not listening: connections are refused at once (an unused port can
+    instead hang until the timeout under WSL's mirrored networking)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    yield f"http://127.0.0.1:{sock.getsockname()[1]}"
+    sock.close()
+
+
+@pytest.fixture
+def settings(tmp_path: Path, offline_url: str) -> Settings:
+    return Settings(data_dir=tmp_path / "data", frontend_dist=tmp_path / "no-dist", ollama_url=offline_url)
 
 
 @pytest.fixture

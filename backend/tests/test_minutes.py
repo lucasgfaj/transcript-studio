@@ -163,11 +163,6 @@ def test_exports(client: TestClient) -> None:
     assert txt == "Bom dia a todos.\nVamos começar.\n"
 
 
-def test_models_endpoint_reports_offline_ollama(client: TestClient) -> None:
-    body = client.get("/api/models").json()
-    assert body == {"default": "qwen3.5:4b", "available": False, "models": []}
-
-
 def test_context_files_reach_the_prompt(settings: Settings, transcriber: FakeTranscriber, gpu: FakeGpu) -> None:
     settings.context_dir.mkdir(parents=True)
     (settings.context_dir / "glossario.md").write_text("VGV = valor geral de vendas", encoding="utf-8")

@@ -13,8 +13,11 @@ from transcript_studio.infrastructure.audio_storage import FileAudioStorage
 from transcript_studio.infrastructure.ollama_client import OllamaClient
 from transcript_studio.infrastructure.waveform import CachedWaveform
 from transcript_studio.repositories.sql import (
-    SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository,
+    SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository, SqlSettingRepository,
 )
+from transcript_studio.infrastructure.context_files import ContextFilesService
+from transcript_studio.services.llm_models import LlmModelService
+from transcript_studio.services.preferences import PreferencesService
 from transcript_studio.infrastructure.docx_renderer import DocxRenderer
 from transcript_studio.services.documents import MinutesService, TranscriptService
 from transcript_studio.services.export import ExportService
@@ -71,10 +74,17 @@ def get_container(request: Request) -> Container:
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
+def get_preferences(session: SessionDep, settings: SettingsDep) -> PreferencesService:
+    return PreferencesService(SqlSettingRepository(session), settings)
+
+
+PreferencesDep = Annotated[PreferencesService, Depends(get_preferences)]
+
+
 def get_job_service(session: SessionDep, meetings: MeetingServiceDep, container: ContainerDep,
-                    settings: SettingsDep) -> JobService:
+                    preferences: PreferencesDep) -> JobService:
     return JobService(SqlJobRepository(session), SqlMinutesRepository(session), meetings, container.worker.submit,
-                      container.worker.cancel, settings.default_llm)
+                      container.worker.cancel, preferences.get().default_llm)
 
 
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
@@ -86,3 +96,15 @@ def get_export_service(meetings: MeetingServiceDep, transcripts: TranscriptServi
 
 
 ExportServiceDep = Annotated[ExportService, Depends(get_export_service)]
+
+
+def get_llm_models(ollama: OllamaDep, settings: SettingsDep) -> LlmModelService:
+    return LlmModelService(OllamaClient(settings.ollama_url, timeout=10), settings.gpu_memory_gb)
+
+
+def get_context_files(settings: SettingsDep) -> ContextFilesService:
+    return ContextFilesService(settings.context_dir)
+
+
+LlmModelsDep = Annotated[LlmModelService, Depends(get_llm_models)]
+ContextFilesDep = Annotated[ContextFilesService, Depends(get_context_files)]

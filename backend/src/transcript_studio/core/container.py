@@ -10,6 +10,9 @@ from transcript_studio.core.config import Settings
 from transcript_studio.domain.ports import ChatModel, GpuReleaser, Transcriber
 from transcript_studio.infrastructure.audio_storage import FileAudioStorage
 from transcript_studio.infrastructure.context_files import MarkdownContextSource
+from transcript_studio.repositories.sql import SqlSettingRepository
+from transcript_studio.schemas.preferences import PreferencesRead
+from transcript_studio.services.preferences import PreferencesService
 from transcript_studio.infrastructure.ollama_chat import OllamaChat
 from transcript_studio.infrastructure.ollama_client import OllamaClient
 from transcript_studio.models import Job, JobKind
@@ -33,9 +36,13 @@ class Container:
 
 def build_container(settings: Settings, engine: Engine, transcriber: Transcriber | None = None,
                     gpu: GpuReleaser | None = None, chat: ChatModel | None = None) -> Container:
+    def preferences() -> PreferencesRead:
+        with Session(engine) as session:
+            return PreferencesService(SqlSettingRepository(session), settings).get()
+
     if transcriber is None:
         from transcript_studio.infrastructure.whisper import FasterWhisperTranscriber
-        transcriber = FasterWhisperTranscriber(settings.default_whisper, batch_size=settings.whisper_batch_size)
+        transcriber = FasterWhisperTranscriber(preferences().whisper_model, batch_size=settings.whisper_batch_size)
     events = JobEvents()
     gpu = gpu or OllamaClient(settings.ollama_url)
 
@@ -47,7 +54,7 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
     minutes = MinutesJobHandler(
         uow,
         MinutesWriter(chat or OllamaChat(settings.ollama_url, settings.llm_context_tokens), settings.minutes_chunk_chars),
-        MarkdownContextSource(settings.context_dir, settings.context_max_chars),
+        MarkdownContextSource(settings.context_dir, lambda: preferences().context_max_chars),
         transcriber,
         events,
     )

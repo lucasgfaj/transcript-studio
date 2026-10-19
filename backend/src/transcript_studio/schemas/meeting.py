@@ -87,20 +87,6 @@ class GenerateMinutesRequest(SQLModel):
     model: str | None = None
 
 
-class LlmModel(SQLModel):
-    name: str
-    size: int | None = None
-    parameter_size: str | None = None
-    quantization: str | None = None
-    family: str | None = None
-
-
-class ModelsRead(SQLModel):
-    default: str
-    available: bool
-    models: list[LlmModel]
-
-
 class TranscribeRequest(SQLModel):
     language: str | None = None
     mode: Literal["fast", "detailed"] = "fast"

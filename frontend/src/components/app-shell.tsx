@@ -13,8 +13,8 @@ const nav = [
   { to: "/", label: "Reuniões", icon: Library, end: true },
   { to: "/nova", label: "Nova reunião", icon: Plus },
   { to: "/ao-vivo", label: "Ao vivo", icon: Radio },
-  { to: "/modelos", label: "Modelos", icon: Boxes, soon: true },
-  { to: "/contexto", label: "Contexto", icon: BookText, soon: true },
+  { to: "/modelos", label: "Modelos", icon: Boxes },
+  { to: "/contexto", label: "Contexto", icon: BookText }
 ]
 
 function OllamaStatus() {
@@ -48,31 +48,23 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
       </Link>
       <SearchButton onClick={onSearch} />
       <nav className="flex flex-col gap-1">
-        {nav.map(({ to, label, icon: Icon, end, soon }) =>
-          soon ? (
-            <span key={to} className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/60">
-              <Icon className="size-4" />
-              {label}
-              <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">em breve</span>
-            </span>
-          ) : (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                  isActive ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                )
-              }
-            >
-              <Icon className="size-4" />
-              {label}
-            </NavLink>
-          ),
-        )}
+        {nav.map(({ to, label, icon: Icon, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                isActive ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+              )
+            }
+          >
+            <Icon className="size-4" />
+            {label}
+          </NavLink>
+        ))}
       </nav>
       <div className="mt-auto flex flex-col gap-3">
         <GpuQueue onNavigate={onNavigate} />

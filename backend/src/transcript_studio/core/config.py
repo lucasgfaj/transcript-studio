@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     default_llm: str = "qwen3.5:4b"  # measured: 32-min meeting in 44 s fully on GPU; qwen3:8b took 312 s
     default_whisper: str = "large-v3-turbo"
+    gpu_memory_gb: float = 6.0  # RTX 4050 Laptop; used to tell which LLMs fit entirely on the GPU
     whisper_preload: bool = True  # load Whisper at startup so the first transcription starts immediately
     whisper_batch_size: int = 16  # best measured on the RTX 4050 6 GB (24 gave no gain)
     default_language: str = "pt"

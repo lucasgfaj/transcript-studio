@@ -5,7 +5,7 @@ from sqlalchemy import String, cast
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, delete, or_, select
 
-from transcript_studio.models import Job, JobKind, JobStatus, Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import AppSetting, Job, JobKind, JobStatus, Meeting, MeetingStatus, Minutes, Segment
 
 
 class SqlMeetingRepository:
@@ -128,3 +128,17 @@ class SqlMinutesRepository:
         self._session.commit()
         self._session.refresh(minutes)
         return minutes
+
+
+class SqlSettingRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def all(self) -> dict[str, str]:
+        return {row.key: row.value for row in self._session.exec(select(AppSetting)).all()}
+
+    def set(self, key: str, value: str) -> None:
+        row = self._session.get(AppSetting, key) or AppSetting(key=key, value=value)
+        row.value = value
+        self._session.add(row)
+        self._session.commit()

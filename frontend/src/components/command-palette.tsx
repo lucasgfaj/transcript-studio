@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useState } from "react"
 import { useNavigate } from "react-router"
-import { FileText, Library, Moon, Plus, Search, Sun } from "lucide-react"
+import { BookText, Boxes, FileText, Library, Moon, Plus, Radio, Search, Sun } from "lucide-react"
 
 import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator, CommandShortcut,
@@ -69,6 +69,15 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         <CommandGroup heading="Ações">
           <CommandItem value="nova" onSelect={() => run(() => navigate("/nova"))}>
             <Plus /> Nova reunião
+          </CommandItem>
+          <CommandItem value="ao-vivo" onSelect={() => run(() => navigate("/ao-vivo"))}>
+            <Radio /> Gravar ao vivo
+          </CommandItem>
+          <CommandItem value="modelos" onSelect={() => run(() => navigate("/modelos"))}>
+            <Boxes /> Modelos
+          </CommandItem>
+          <CommandItem value="contexto" onSelect={() => run(() => navigate("/contexto"))}>
+            <BookText /> Contexto (glossário e pessoas)
           </CommandItem>
           <CommandItem value="biblioteca" onSelect={() => run(() => navigate("/"))}>
             <Library /> Todas as reuniões

@@ -2,7 +2,16 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)** e **5 (gravação ao vivo)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)**, **5 (gravação ao vivo)** e **6 (modelos e contexto)**.
+
+## Modelos e contexto (fase 6)
+
+- **Modelos:** lista o que está instalado no Ollama e marca o que cabe inteiro na GPU de 6 GB e o que roda em parte na CPU (bem mais lento). Também mostra o que está carregado agora.
+  - Escolhe o modelo padrão da ata e apaga modelos (o padrão é protegido).
+  - Baixa modelos sugeridos, ou qualquer um da biblioteca do Ollama, com barra de progresso.
+  - Troca o tamanho do Whisper. A troca passa pela fila de GPU, então uma transcrição em andamento termina com o modelo com que começou.
+- **Contexto:** edita os arquivos Markdown de `data/context/` (glossário, pessoas, empresas), cria e apaga. Mostra quantos caracteres vão para o prompt, quais arquivos ficaram de fora por falta de espaço, e permite ajustar o limite (1.000 a 12.000).
+- As escolhas ficam no banco (tabela `appsetting`) e passam por cima dos valores de `core/config.py`.
 
 ## Ao vivo (fase 5)
 
@@ -142,8 +151,10 @@ backend/src/transcript_studio/
 | POST | `/api/meetings/{id}/minutes/generate` (`{"model": "qwen3.5:4b"}`; 409 sem transcrição) |
 | GET | `/api/meetings/{id}/minutes/{versão}` (uma versão antiga da ata) |
 | GET | `/api/meetings/{id}/export?format=md\|docx\|txt\|srt` |
-| GET | `/api/models` (modelos instalados no Ollama e o padrão) |
 | WS | `/api/live` (gravação ao vivo; protocolo documentado em `controllers/live.py`) |
+| GET | `/api/models` (instalados, catálogo, Whisper) · POST `/api/models/pull` (progresso NDJSON) · DELETE `/api/models/{nome}` |
+| GET / PUT | `/api/preferences` (modelo padrão da ata, Whisper, limite do contexto) |
+| GET | `/api/context` · GET / PUT / DELETE `/api/context/file?path=` |
 | GET | `/api/health` (status do Ollama e da fila de GPU) |
 
 A documentação interativa fica em http://localhost:8000/docs.

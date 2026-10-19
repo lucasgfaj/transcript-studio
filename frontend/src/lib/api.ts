@@ -116,12 +116,59 @@ export interface LlmModel {
   parameter_size: string | null
   quantization: string | null
   family: string | null
+  loaded: boolean
+  vram: number | null
+  fits_gpu: boolean | null
+}
+
+export interface CatalogModel {
+  name: string
+  description: string
+  approx_gb: number
+  installed: boolean
+}
+
+export interface WhisperModel {
+  name: string
+  description: string
+  downloaded: boolean
+  active: boolean
 }
 
 export interface ModelsInfo {
   default: string
   available: boolean
+  gpu_memory_gb: number
   models: LlmModel[]
+  catalog: CatalogModel[]
+  whisper: WhisperModel[]
+}
+
+export interface Preferences {
+  default_llm: string
+  whisper_model: string
+  context_max_chars: number
+}
+
+export interface PullEvent {
+  status?: string
+  completed?: number | null
+  total?: number | null
+  percent?: number | null
+  error?: string
+}
+
+export interface ContextFile {
+  path: string
+  chars: number
+  included: boolean
+  reason: string | null
+}
+
+export interface ContextOverview {
+  max_chars: number
+  used_chars: number
+  files: ContextFile[]
 }
 
 export class ApiError extends Error {
@@ -217,6 +264,40 @@ export const api = {
     request<MinutesVersion & { markdown: string }>(`/api/meetings/${id}/minutes/${versionId}`),
   exportUrl: (id: string, format: "md" | "docx" | "txt" | "srt") => `/api/meetings/${id}/export?format=${format}`,
   models: () => request<ModelsInfo>("/api/models"),
+  deleteModel: (name: string) => request<void>(`/api/models/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  /** Streams NDJSON progress from the server while Ollama downloads the model. */
+  pullModel: async (name: string, onEvent: (event: PullEvent) => void, signal?: AbortSignal) => {
+    const response = await fetch("/api/models/pull", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+      signal,
+    })
+    if (!response.ok || !response.body) throw await errorFrom(response)
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffer = ""
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as PullEvent)
+    }
+  },
+  preferences: () => request<Preferences>("/api/preferences"),
+  updatePreferences: (changes: Partial<Preferences>) =>
+    request<Preferences>("/api/preferences", { method: "PUT", body: JSON.stringify(changes) }),
+
+  context: () => request<ContextOverview>("/api/context"),
+  contextFile: (path: string) => request<{ path: string; content: string }>(`/api/context/file?path=${encodeURIComponent(path)}`),
+  saveContextFile: (path: string, content: string) =>
+    request<{ path: string; content: string }>(`/api/context/file?path=${encodeURIComponent(path)}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+  deleteContextFile: (path: string) =>
+    request<void>(`/api/context/file?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
   activeJobs: () => request<ActiveJob[]>("/api/jobs"),
   /** A finished job, or null if it was deleted with its meeting. */
   getJobSafe: (jobId: string) => request<Job>(`/api/jobs/${jobId}`).catch(() => null),

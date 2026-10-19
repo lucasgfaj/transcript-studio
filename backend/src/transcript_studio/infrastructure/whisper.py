@@ -88,6 +88,18 @@ class FasterWhisperTranscriber:
             return [TranscribedSegment(offset + float(s.start), offset + float(s.end), s.text.strip())
                     for s in segments if s.text.strip()]
 
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    def set_model(self, name: str) -> None:
+        """Switches the Whisper size; the old model leaves the GPU and the new one loads on next use."""
+        with self._lock:
+            if name != self._model_name:
+                self._model = self._batched = None
+                gc.collect()
+                self._model_name = name
+
     def warm_up(self) -> None:
         """Loads the model ahead of time: a cold first load took ~30 s, a warm job on 3 min of audio ~4 s."""
         with self._lock:
@@ -125,6 +137,17 @@ class FasterWhisperTranscriber:
         self._batched = BatchedInferencePipeline(model=model) if self._batch_size > 1 else None
         self.device = device
         return self._model, self._batched
+
+
+def is_downloaded(name: str) -> bool:
+    """Whether the model files are already in the Hugging Face cache (otherwise the first use downloads them)."""
+    try:
+        from faster_whisper.utils import _MODELS
+        from huggingface_hub import try_to_load_from_cache
+
+        return isinstance(try_to_load_from_cache(_MODELS.get(name, name), "model.bin"), str)
+    except Exception:
+        return False
 
 
 def _duration(audio: Path) -> float:
