@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, FileText, Loader2, Mic, Upload } from "lucide-react"
 import { toast } from "sonner"
 
+import { useDocumentTitle } from "@/hooks/use-document-title"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,6 +17,7 @@ import { api, type MeetingSource } from "@/lib/api"
 import { splitNames, todayIso } from "@/lib/format"
 
 export function NewMeetingPage() {
+  useDocumentTitle("Nova reunião")
   const navigate = useNavigate()
   const client = useQueryClient()
   const [title, setTitle] = useState("")

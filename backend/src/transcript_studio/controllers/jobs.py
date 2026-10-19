@@ -9,9 +9,9 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Request, status
 from fastapi.responses import StreamingResponse
 
-from transcript_studio.core.dependencies import ContainerDep, JobServiceDep
+from transcript_studio.core.dependencies import ContainerDep, JobServiceDep, MeetingServiceDep
 from transcript_studio.models import Job, JobKind
-from transcript_studio.schemas.meeting import GenerateMinutesRequest, JobRead, TranscribeRequest
+from transcript_studio.schemas.meeting import ActiveJobRead, GenerateMinutesRequest, JobRead, TranscribeRequest
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -40,9 +40,11 @@ def latest_job(meeting_id: str, service: JobServiceDep, kind: JobKind | None = N
     return _read(job) if job else None
 
 
-@router.get("/jobs", response_model=list[JobRead])
-def active_jobs(service: JobServiceDep) -> list[JobRead]:
-    return [_read(job) for job in service.active()]
+@router.get("/jobs", response_model=list[ActiveJobRead])
+def active_jobs(service: JobServiceDep, meetings: MeetingServiceDep) -> list[ActiveJobRead]:
+    """Queued and running GPU work, oldest first, with the meeting title for the sidebar."""
+    return [ActiveJobRead.model_validate(job, from_attributes=True, update={"meeting_title": meetings.get(job.meeting_id).title})
+            for job in service.active()]
 
 
 @router.get("/jobs/{job_id}", response_model=JobRead)

@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react"
 import { Link } from "react-router"
 import { AudioLines, Clock, FileText, NotebookPen, Plus, Search } from "lucide-react"
 
+import { useDocumentTitle } from "@/hooks/use-document-title"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -21,8 +22,8 @@ const filters: { id: Filter; label: string }[] = [
 
 function Stat({ icon: Icon, label, value }: { icon: typeof Clock; label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
-      <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground">
+    <div className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 sm:px-4 sm:py-3">
+      <span className="hidden size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground sm:grid">
         <Icon className="size-4" />
       </span>
       <div className="leading-tight">
@@ -81,6 +82,7 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 }
 
 export function LibraryPage() {
+  useDocumentTitle("Reuniões")
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
   const query = useDeferredValue(search.trim())
@@ -107,7 +109,7 @@ export function LibraryPage() {
       </div>
 
       {!query && data && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <Stat icon={Clock} label="reuniões" value={String(data.length)} />
           <Stat icon={AudioLines} label="horas de áudio" value={totalHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} />
           <Stat icon={NotebookPen} label="com ata pronta" value={String(data.filter((m) => m.has_minutes).length)} />
@@ -120,7 +122,7 @@ export function LibraryPage() {
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por título, participante ou trecho da transcrição"
+            placeholder="Buscar título, pessoa ou trecho falado"
             className="h-10 pl-9"
             aria-label="Buscar reuniões"
           />

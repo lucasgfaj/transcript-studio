@@ -121,3 +121,7 @@ class JobRead(SQLModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class ActiveJobRead(JobRead):
+    meeting_title: str

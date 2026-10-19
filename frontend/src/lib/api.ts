@@ -91,6 +91,10 @@ export interface Job {
   finished_at: string | null
 }
 
+export interface ActiveJob extends Job {
+  meeting_title: string
+}
+
 export interface LiveSegment {
   start: number
   end: number
@@ -213,6 +217,9 @@ export const api = {
     request<MinutesVersion & { markdown: string }>(`/api/meetings/${id}/minutes/${versionId}`),
   exportUrl: (id: string, format: "md" | "docx" | "txt" | "srt") => `/api/meetings/${id}/export?format=${format}`,
   models: () => request<ModelsInfo>("/api/models"),
+  activeJobs: () => request<ActiveJob[]>("/api/jobs"),
+  /** A finished job, or null if it was deleted with its meeting. */
+  getJobSafe: (jobId: string) => request<Job>(`/api/jobs/${jobId}`).catch(() => null),
   cancelJob: (jobId: string) => request<Job>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
   jobEventsUrl: (jobId: string) => `/api/jobs/${jobId}/events`,
 

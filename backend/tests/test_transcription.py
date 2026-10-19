@@ -60,6 +60,8 @@ def test_rejects_meeting_without_audio_and_duplicate_jobs(client: TestClient, tr
     meeting = upload(client)
     first = client.post(f"/api/meetings/{meeting['id']}/transcribe").json()
     assert client.post(f"/api/meetings/{meeting['id']}/transcribe").status_code == 409
+    active = client.get("/api/jobs").json()
+    assert [(j["id"], j["meeting_title"]) for j in active] == [(first["id"], "reuniao")]
     transcriber.gate.set()
     wait_for(client, first["id"], "done")
 

@@ -1,10 +1,24 @@
+import { lazy, Suspense } from "react"
 import { BrowserRouter, Link, Route, Routes } from "react-router"
 
 import { AppShell } from "@/components/app-shell"
 import { Button } from "@/components/ui/button"
-import { LibraryPage } from "@/pages/library-page"
-import { MeetingPage } from "@/pages/meeting-page"
-import { NewMeetingPage } from "@/pages/new-meeting-page"
+import { Skeleton } from "@/components/ui/skeleton"
+
+// Each page is its own chunk: the meeting page alone pulls in wavesurfer and the Markdown renderer.
+const LibraryPage = lazy(() => import("@/pages/library-page").then((m) => ({ default: m.LibraryPage })))
+const NewMeetingPage = lazy(() => import("@/pages/new-meeting-page").then((m) => ({ default: m.NewMeetingPage })))
+const MeetingPage = lazy(() => import("@/pages/meeting-page").then((m) => ({ default: m.MeetingPage })))
+
+function PageFallback() {
+  return (
+    <div className="flex flex-col gap-6">
+      <Skeleton className="h-10 w-1/2" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
 
 function NotFound() {
   return (
@@ -21,12 +35,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppShell>
-        <Routes>
-          <Route path="/" element={<LibraryPage />} />
-          <Route path="/nova" element={<NewMeetingPage />} />
-          <Route path="/reunioes/:id" element={<MeetingPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<LibraryPage />} />
+            <Route path="/nova" element={<NewMeetingPage />} />
+            <Route path="/reunioes/:id" element={<MeetingPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </AppShell>
     </BrowserRouter>
   )

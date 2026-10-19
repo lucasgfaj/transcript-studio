@@ -4,6 +4,7 @@ import { Pause, Play, RotateCcw, RotateCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useTheme } from "@/components/theme-provider"
 import { formatClock } from "@/lib/format"
 
 export interface AudioPlayerHandle {
@@ -39,6 +40,7 @@ export function AudioPlayer({
   const [playing, setPlaying] = useState(false)
   const [time, setTime] = useState(0)
   const [speed, setSpeed] = useState(1)
+  const { resolvedTheme } = useTheme()
 
   useImperativeHandle(ref, () => ({
     seek: (seconds) => {
@@ -73,6 +75,18 @@ export function AudioPlayer({
     }
   }, [peaks, duration])
 
+  // Colors come from CSS variables; re-read them after the theme class changes on <html>.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() =>
+      waveRef.current?.setOptions({
+        waveColor: cssVar("--muted-foreground"),
+        progressColor: cssVar("--primary"),
+        cursorColor: cssVar("--primary"),
+      }),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [resolvedTheme])
+
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed
   }, [speed])
@@ -81,6 +95,26 @@ export function AudioPlayer({
     const audio = audioRef.current
     if (audio) audio.currentTime = Math.min(Math.max(0, audio.currentTime + delta), duration)
   }
+
+  // Keyboard: Space play/pause, ←/→ 5 s, Shift+←/→ 30 s (ignored while typing or in a dialog).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
+      if (event.ctrlKey || event.metaKey || event.altKey || target.closest("input, textarea, select, [contenteditable], [role=dialog], [role=menu]")) return
+      const audio = audioRef.current
+      if (!audio) return
+      if (event.key === " " || event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        if (audio.paused) void audio.play()
+        else audio.pause()
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault()
+        skip((event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 30 : 5))
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  })
 
   return (
     <div className="flex flex-col gap-3">
@@ -114,10 +148,13 @@ export function AudioPlayer({
         <span className="ml-1 font-mono text-xs tabular-nums text-muted-foreground sm:text-sm">
           {formatClock(time)} / {formatClock(duration)}
         </span>
+        <span className="ml-auto hidden text-[11px] text-muted-foreground lg:inline" title="Atalhos do player">
+          Espaço tocar · ←/→ 5 s · Shift 30 s
+        </span>
         <Button
           variant="outline"
           size="sm"
-          className="ml-auto w-14 font-mono tabular-nums"
+          className="ml-auto w-14 font-mono tabular-nums lg:ml-2"
           aria-label="Velocidade de reprodução"
           onClick={() => setSpeed(speeds[(speeds.indexOf(speed) + 1) % speeds.length])}
         >

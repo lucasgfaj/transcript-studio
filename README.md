@@ -2,7 +2,15 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)** e **3 (ata com o Ollama)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)** e **4 (acabamento da interface)**.
+
+## Interface (fase 4)
+
+- **Busca rápida (Ctrl+K / ⌘K):** acha qualquer reunião pelo título, pelos participantes ou por algo que foi dito, e tem atalhos para nova reunião e troca de tema.
+- **Busca na transcrição:** ignora acentos ("comissao" encontra "comissão"), destaca as ocorrências e navega entre elas com Enter / Shift+Enter.
+- **Player:** Espaço toca/pausa, ←/→ pulam 5 s, Shift+←/→ pulam 30 s. O trecho que está tocando fica destacado, e "Seguir áudio" rola junto.
+- **Fila da GPU na barra lateral:** mostra o que está rodando, a etapa e o que vem a seguir. Avisa quando uma transcrição ou ata termina, mesmo que você esteja em outra página.
+- **Celular e tema claro/escuro** revisados, título da aba por página (⏳ enquanto processa) e páginas carregadas sob demanda.
 
 ## Ata (fase 3)
 

@@ -26,6 +26,7 @@ import { MinutesPanel } from "@/components/meetings/minutes-panel"
 import { StatusBadge } from "@/components/meetings/status-badge"
 import { TranscribeBar } from "@/components/meetings/transcribe-bar"
 import { TranscriptPanel } from "@/components/meetings/transcript-panel"
+import { useDocumentTitle } from "@/hooks/use-document-title"
 import { useTranscription } from "@/hooks/use-transcription"
 import { useDeleteAudio, useDeleteMeeting, useInvalidateMeeting, useMeeting, usePeaks, useTranscript } from "@/hooks/use-meetings"
 import { api, type Meeting } from "@/lib/api"
@@ -90,6 +91,8 @@ export function MeetingPage() {
   const [tab, setTab] = useState<string | null>(null)
   const transcription = useTranscription(id)
   const timed = (useTranscript(id).data?.segments.length ?? 0) > 0
+  const busy = meeting?.status === "transcribing" || meeting?.status === "generating"
+  useDocumentTitle(meeting ? `${busy ? "⏳ " : ""}${meeting.title}` : null)
 
   if (isLoading) {
     return (
@@ -130,23 +133,23 @@ export function MeetingPage() {
         <ArrowLeft className="size-4" /> Reuniões
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 sm:flex-1">
           <div className="mb-2">
             <StatusBadge status={meeting.status} />
           </div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight break-words sm:text-3xl">{meeting.title}</h1>
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <CalendarDays className="size-4" /> {formatDate(meeting.date)}
             </span>
             {meeting.has_audio && (
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                 <Clock className="size-4" /> {formatDuration(meeting.audio_duration)}
               </span>
             )}
             {meeting.has_audio && (
-              <span className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                 <FileAudio className="size-4" /> {formatBytes(meeting.audio_size)}
               </span>
             )}
@@ -155,7 +158,7 @@ export function MeetingPage() {
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Button variant="outline" onClick={() => setEditing(true)}>
             <Pencil /> Editar
           </Button>
