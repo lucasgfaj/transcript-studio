@@ -1,0 +1,203 @@
+import { useCallback, useEffect, useRef, useState } from "react"
+
+export type MicStatus = "idle" | "requesting" | "ready" | "denied" | "error"
+
+export interface MicDevice {
+  id: string
+  label: string
+}
+
+const STORAGE_KEY = "live-microphone"
+
+// Audio thread: downmix, resample to 16 kHz, post PCM16 every 250 ms and the loudness every ~50 ms.
+const WORKLET = `
+class Pcm16Writer extends AudioWorkletProcessor {
+  constructor() {
+    super()
+    this.ratio = sampleRate / 16000
+    this.position = 0
+    this.out = new Int16Array(4000)
+    this.filled = 0
+    this.sum = 0
+    this.count = 0
+    this.levelEvery = Math.round(sampleRate * 0.05)
+  }
+  process(inputs) {
+    const channels = inputs[0]
+    if (!channels || !channels.length) return true
+    const input = channels[0]
+    for (let i = 0; i < input.length; i++) {
+      this.sum += input[i] * input[i]
+      if (++this.count >= this.levelEvery) {
+        this.port.postMessage({ rms: Math.sqrt(this.sum / this.count) })
+        this.sum = 0
+        this.count = 0
+      }
+    }
+    for (; this.position < input.length; this.position += this.ratio) {
+      const i = Math.floor(this.position)
+      const frac = this.position - i
+      const next = i + 1 < input.length ? input[i + 1] : input[i]
+      const value = Math.max(-1, Math.min(1, input[i] + (next - input[i]) * frac))
+      this.out[this.filled++] = value < 0 ? value * 32768 : value * 32767
+      if (this.filled === this.out.length) {
+        this.port.postMessage({ pcm: this.out.buffer }, [this.out.buffer])
+        this.out = new Int16Array(4000)
+        this.filled = 0
+      }
+    }
+    this.position -= input.length
+    return true
+  }
+}
+registerProcessor("pcm16-writer", Pcm16Writer)
+`
+
+/** Loudness in 0..1 on a decibel scale (-60 dB → 0, -10 dB → 1), so normal speech fills the meter. */
+function toLevel(rms: number): number {
+  const db = 20 * Math.log10(Math.max(rms, 1e-6))
+  return Math.min(1, Math.max(0, (db + 60) / 50))
+}
+
+function readSaved(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY) ?? ""
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * Opens the chosen microphone as soon as the page loads, so the meter shows the voice before
+ * recording starts. `onPcm` receives 16 kHz PCM16 blocks for whoever is recording.
+ */
+export function useMicrophone() {
+  const [status, setStatus] = useState<MicStatus>("idle")
+  const [devices, setDevices] = useState<MicDevice[]>([])
+  const [deviceId, setDeviceId] = useState<string>(readSaved)
+  const [level, setLevel] = useState(0)
+  const [suspended, setSuspended] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const onPcm = useRef<((pcm: ArrayBuffer) => void) | null>(null)
+  const parts = useRef<{ stream: MediaStream; context: AudioContext; node: AudioWorkletNode } | null>(null)
+  const generations = useRef(0)
+
+  const close = useCallback(() => {
+    const current = parts.current
+    parts.current = null
+    if (!current) return
+    current.node.port.onmessage = null
+    current.node.disconnect()
+    current.stream.getTracks().forEach((track) => track.stop())
+    void current.context.close()
+    setLevel(0)
+  }, [])
+
+  const refreshDevices = useCallback(async () => {
+    const all = await navigator.mediaDevices.enumerateDevices()
+    const inputs = all.filter((d) => d.kind === "audioinput" && d.deviceId)
+    setDevices(inputs.map((d, i) => ({ id: d.deviceId, label: d.label || `Microfone ${i + 1}` })))
+  }, [])
+
+  const open = useCallback(async (id: string) => {
+    close()
+    // Only the latest open() may keep its microphone: an older one still awaiting the permission
+    // prompt would otherwise leave a second worklet running and every block would be sent twice.
+    const generation = ++generations.current
+    const stale = () => generation !== generations.current
+    setStatus("requesting")
+    setError(null)
+    let stream: MediaStream | null = null
+    let context: AudioContext | null = null
+    const discard = () => {
+      stream?.getTracks().forEach((track) => track.stop())
+      void context?.close()
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: id && id !== "default" ? { exact: id } : undefined,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      if (stale()) return discard()
+      context = new AudioContext()
+      const audio = context
+      const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }))
+      await audio.audioWorklet.addModule(url)
+      URL.revokeObjectURL(url)
+      if (stale()) return discard()
+      const node = new AudioWorkletNode(audio, "pcm16-writer")
+      node.port.onmessage = (event: MessageEvent<{ rms?: number; pcm?: ArrayBuffer }>) => {
+        if (event.data.rms !== undefined) setLevel(toLevel(event.data.rms))
+        if (event.data.pcm) onPcm.current?.(event.data.pcm)
+      }
+      audio.createMediaStreamSource(stream).connect(node)
+      // The node must reach the destination or some browsers never run it; it outputs silence.
+      node.connect(audio.destination)
+      // Created after the permission prompt, the context can start "suspended" and process nothing.
+      if (audio.state !== "running") await audio.resume().catch(() => undefined)
+      if (stale()) {
+        node.disconnect()
+        return discard()
+      }
+      setSuspended(audio.state !== "running")
+      audio.onstatechange = () => setSuspended(audio.state !== "running")
+      parts.current = { stream, context: audio, node }
+      stream.getAudioTracks()[0]?.addEventListener("ended", () => {
+        setError("O microfone foi desconectado.")
+        setStatus("error")
+      })
+      await refreshDevices()
+      setStatus("ready")
+    } catch (err) {
+      discard()
+      if (stale()) return
+      const name = err instanceof Error ? err.name : ""
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setStatus("denied")
+        setError("Permissão do microfone negada. Clique no cadeado da barra de endereço e permita o microfone.")
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setStatus("error")
+        setError("Esse microfone não foi encontrado. Escolha outro na lista.")
+        await refreshDevices().catch(() => undefined)
+      } else {
+        setStatus("error")
+        setError(err instanceof Error ? err.message : "Não consegui abrir o microfone.")
+      }
+    }
+  }, [close, refreshDevices])
+
+  const choose = useCallback((id: string) => {
+    setDeviceId(id)
+    try {
+      localStorage.setItem(STORAGE_KEY, id)
+    } catch {
+      /* not persisted in private mode */
+    }
+    void open(id)
+  }, [open])
+
+  /** Some browsers keep the context suspended until a click; the page offers a button for it. */
+  const resume = useCallback(async () => {
+    await parts.current?.context.resume()
+    setSuspended(parts.current?.context.state !== "running")
+  }, [])
+
+  useEffect(() => {
+    void open(readSaved())
+    const onChange = () => void refreshDevices().catch(() => undefined)
+    navigator.mediaDevices.addEventListener("devicechange", onChange)
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", onChange)
+      generations.current++  // an open() still in flight becomes stale and cleans up after itself
+      close()
+    }
+  }, [open, close, refreshDevices])
+
+  const selected = devices.find((d) => d.id === deviceId) ? deviceId : devices[0]?.id ?? ""
+  return { status, devices, deviceId: selected, level, suspended, error, onPcm, choose, retry: () => open(deviceId), resume }
+}
