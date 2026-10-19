@@ -1,0 +1,17 @@
+# Local data: meeting audio, transcripts and the SQLite database
+data/
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+backend/.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+.DS_Store
+Thumbs.db
