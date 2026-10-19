@@ -5,13 +5,17 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
-from transcript_studio.core.dependencies import MeetingServiceDep, MinutesServiceDep, TranscriptServiceDep
+from transcript_studio.core.dependencies import (
+    ExportServiceDep, MeetingServiceDep, MinutesServiceDep, TranscriptServiceDep,
+)
 from transcript_studio.models import MeetingSource, MeetingStatus
 from transcript_studio.schemas.meeting import (
-    MeetingCreate, MeetingRead, MeetingUpdate, MinutesBundle, MinutesUpdate, TranscriptRead, TranscriptUpdate,
+    MeetingCreate, MeetingRead, MeetingUpdate, MinutesBundle, MinutesRead, MinutesUpdate, TranscriptRead,
+    TranscriptUpdate,
 )
+from transcript_studio.services.export import ExportFormat
 from transcript_studio.services.meetings import to_read
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
@@ -106,6 +110,19 @@ def get_minutes(meeting_id: str, service: MinutesServiceDep) -> MinutesBundle:
 @router.put("/{meeting_id}/minutes", response_model=MinutesBundle)
 def put_minutes(meeting_id: str, data: MinutesUpdate, service: MinutesServiceDep) -> MinutesBundle:
     return service.add_version(meeting_id, data.markdown, model="manual")
+
+
+@router.get("/{meeting_id}/minutes/{version_id}", response_model=MinutesRead)
+def get_minutes_version(meeting_id: str, version_id: int, service: MinutesServiceDep) -> MinutesRead:
+    return service.version(meeting_id, version_id)
+
+
+@router.get("/{meeting_id}/export")
+def export(meeting_id: str, service: ExportServiceDep,
+           fmt: Annotated[ExportFormat, Query(alias="format")] = "md") -> Response:
+    file = service.export(meeting_id, fmt)
+    return Response(file.content, media_type=file.media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{file.filename}"'})
 
 
 def _title_from_filename(name: str) -> str:

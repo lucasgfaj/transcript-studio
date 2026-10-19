@@ -84,6 +84,20 @@ def import_meetings(root: Path, meetings: MeetingService, transcripts: Transcrip
     return report
 
 
+def import_context(root: Path, target: Path) -> list[str]:
+    """Copies the reference Markdown (glossary, people, companies) without overwriting local edits."""
+    source = root / "contexto"
+    copied: list[str] = []
+    for path in sorted(source.rglob("*.md")) if source.is_dir() else []:
+        destination = target / path.relative_to(source)
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(path.read_bytes())
+        copied.append(str(path.relative_to(source)))
+    return copied
+
+
 def main() -> int:
     from sqlmodel import Session
 
@@ -101,7 +115,8 @@ def main() -> int:
         report = import_meetings(args.root.expanduser(), meetings,
                                  TranscriptService(meetings, SqlSegmentRepository(session)),
                                  MinutesService(meetings, SqlMinutesRepository(session)))
-    print(f"Importadas: {len(report.imported)} | Já existiam: {len(report.skipped)}")
+    context = import_context(args.root.expanduser(), settings.context_dir)
+    print(f"Importadas: {len(report.imported)} | Já existiam: {len(report.skipped)} | Contexto: {len(context)} arquivos")
     for name in report.imported:
         print(f"  + {name}")
     for warning in report.warnings:

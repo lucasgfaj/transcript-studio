@@ -2,7 +2,24 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)** e **2 (transcrição na GPU)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)** e **3 (ata com o Ollama)**.
+
+## Ata (fase 3)
+
+Na aba **Ata**, escolha o modelo e clique em **Gerar com IA**. Reuniões longas são lidas em partes (notas curtas por trecho) e depois a ata é escrita, com o texto aparecendo enquanto o modelo escreve. Cada geração ou edição vira uma versão nova: dá para ver as anteriores e restaurar. **Exportar** baixa a ata em `.docx` ou `.md`, a transcrição em `.txt` e legendas `.srt`.
+
+Comparação na reunião ADM (32 min, 20 mil caracteres de transcrição), na mesma RTX 4050:
+
+| Modelo | Tempo | Onde roda | Resultado |
+| --- | --- | --- | --- |
+| **qwen3.5:4b** (padrão) | 44 s | 100% GPU | Ata organizada, usa o contexto para acertar nomes, poucas tarefas e todas com responsável |
+| qwen3:8b | 312 s | 37% CPU | Mais exaustiva, mas lista fatos como "tarefas" |
+
+Detalhes que deixam isso rápido e confiável:
+- Antes de o Ollama carregar, o Whisper sai da GPU, porque os dois não cabem juntos em 6 GB.
+- Notas limitadas a 700 tokens por trecho. A consolidação roda no máximo 2 rodadas e só repete se as notas encolherem: um modelo prolixo deixava o laço sem fim.
+- `repeat_penalty` evita que modelos pequenos repitam a mesma frase.
+- O contexto de `data/context/` (glossário, entidades e grupos, importado do transcript-mk) entra no prompt só para acertar nomes, sem ser citado.
 
 ## Transcrição (fase 2)
 
@@ -102,6 +119,10 @@ backend/src/transcript_studio/
 | GET | `/api/meetings/{id}/job` (última tarefa da reunião) |
 | GET | `/api/jobs`, `/api/jobs/{id}`; POST `/api/jobs/{id}/cancel` |
 | GET | `/api/jobs/{id}/events` (SSE: snapshot, status, segments, done/error/cancelled) |
+| POST | `/api/meetings/{id}/minutes/generate` (`{"model": "qwen3.5:4b"}`; 409 sem transcrição) |
+| GET | `/api/meetings/{id}/minutes/{versão}` (uma versão antiga da ata) |
+| GET | `/api/meetings/{id}/export?format=md\|docx\|txt\|srt` |
+| GET | `/api/models` (modelos instalados no Ollama e o padrão) |
 | GET | `/api/health` (status do Ollama e da fila de GPU) |
 
 A documentação interativa fica em http://localhost:8000/docs.

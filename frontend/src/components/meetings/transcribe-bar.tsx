@@ -51,7 +51,11 @@ function LastRun({ job }: { job: Job }) {
   )
 }
 
-export function TranscribeBar({ transcription, hasTranscript }: { transcription: ReturnType<typeof useTranscription>; hasTranscript: boolean }) {
+export function TranscribeBar({ transcription, hasTranscript, busy }: {
+  transcription: ReturnType<typeof useTranscription>
+  hasTranscript: boolean
+  busy?: boolean
+}) {
   const { job, active, start, cancel } = transcription
   const [mode, setMode] = useState<TranscriptionMode>("fast")
   const [language, setLanguage] = useState("pt")
@@ -111,7 +115,8 @@ export function TranscribeBar({ transcription, hasTranscript }: { transcription:
         </select>
         <p className="flex-1 text-xs text-muted-foreground">{modes.find((m) => m.value === mode)?.hint}</p>
         <Button
-          disabled={start.isPending}
+          disabled={start.isPending || busy}
+          title={busy ? "Aguarde a ata terminar" : undefined}
           onClick={() =>
             start.mutate(
               { mode, language: language || null },

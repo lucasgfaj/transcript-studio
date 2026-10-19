@@ -1,4 +1,4 @@
-"""Controller for GPU jobs: queue a transcription, follow it live (SSE), cancel it."""
+"""Controller for GPU jobs: queue a transcription or minutes generation, follow it live (SSE), cancel it."""
 from __future__ import annotations
 
 import asyncio
@@ -10,8 +10,8 @@ from fastapi import APIRouter, Request, status
 from fastapi.responses import StreamingResponse
 
 from transcript_studio.core.dependencies import ContainerDep, JobServiceDep
-from transcript_studio.models import Job
-from transcript_studio.schemas.meeting import JobRead, TranscribeRequest
+from transcript_studio.models import Job, JobKind
+from transcript_studio.schemas.meeting import GenerateMinutesRequest, JobRead, TranscribeRequest
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -29,9 +29,14 @@ def transcribe(meeting_id: str, service: JobServiceDep, body: TranscribeRequest 
     return _read(service.transcribe(meeting_id, body.language, body.mode))
 
 
+@router.post("/meetings/{meeting_id}/minutes/generate", response_model=JobRead, status_code=status.HTTP_202_ACCEPTED)
+def generate_minutes(meeting_id: str, service: JobServiceDep, body: GenerateMinutesRequest | None = None) -> JobRead:
+    return _read(service.generate_minutes(meeting_id, (body or GenerateMinutesRequest()).model))
+
+
 @router.get("/meetings/{meeting_id}/job", response_model=JobRead | None)
-def latest_job(meeting_id: str, service: JobServiceDep) -> JobRead | None:
-    job = service.latest_for(meeting_id)
+def latest_job(meeting_id: str, service: JobServiceDep, kind: JobKind | None = None) -> JobRead | None:
+    job = service.latest_for(meeting_id, kind)
     return _read(job) if job else None
 
 
@@ -54,13 +59,13 @@ def cancel_job(job_id: str, service: JobServiceDep) -> JobRead:
 async def job_events(job_id: str, request: Request, service: JobServiceDep, container: ContainerDep) -> StreamingResponse:
     """Server-Sent Events: a snapshot (job + segments so far), then segments/progress until it ends."""
     service.get(job_id)  # 404 before opening the stream
-    subscriber, partial = container.events.subscribe(job_id)
+    subscriber, partial, text = container.events.subscribe(job_id)
 
     async def stream() -> AsyncIterator[str]:
         try:
             # Read the job after subscribing, so an event published in between is not lost.
             job = service.get(job_id)
-            yield _sse({"type": "snapshot", "job": _read(job).model_dump(mode="json"), "segments": partial})
+            yield _sse({"type": "snapshot", "job": _read(job).model_dump(mode="json"), "segments": partial, "text": text})
             if not job.status.active:
                 return
             while not await request.is_disconnected():

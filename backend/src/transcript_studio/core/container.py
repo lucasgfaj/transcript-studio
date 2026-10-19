@@ -7,14 +7,19 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 from transcript_studio.core.config import Settings
-from transcript_studio.domain.ports import GpuReleaser, Transcriber
+from transcript_studio.domain.ports import ChatModel, GpuReleaser, Transcriber
 from transcript_studio.infrastructure.audio_storage import FileAudioStorage
+from transcript_studio.infrastructure.context_files import MarkdownContextSource
+from transcript_studio.infrastructure.ollama_chat import OllamaChat
 from transcript_studio.infrastructure.ollama_client import OllamaClient
 from transcript_studio.models import Job, JobKind
 from transcript_studio.repositories.sql import SqlUnitOfWork
 from transcript_studio.services.events import JobEvents
 from transcript_studio.services.gpu_worker import GpuWorker
-from transcript_studio.services.transcription import TranscriptionJobHandler, recover_interrupted_jobs
+from transcript_studio.services.jobs import recover_interrupted_jobs
+from transcript_studio.services.minutes_job import MinutesJobHandler
+from transcript_studio.services.minutes_writer import MinutesWriter
+from transcript_studio.services.transcription import TranscriptionJobHandler
 
 
 @dataclass
@@ -26,17 +31,23 @@ class Container:
 
 
 def build_container(settings: Settings, engine: Engine, transcriber: Transcriber | None = None,
-                    gpu: GpuReleaser | None = None) -> Container:
+                    gpu: GpuReleaser | None = None, chat: ChatModel | None = None) -> Container:
     if transcriber is None:
         from transcript_studio.infrastructure.whisper import FasterWhisperTranscriber
         transcriber = FasterWhisperTranscriber(settings.default_whisper, batch_size=settings.whisper_batch_size)
     events = JobEvents()
-    handler = TranscriptionJobHandler(
-        uow=lambda: SqlUnitOfWork(engine),
-        audio=FileAudioStorage(settings.meetings_dir),
-        transcriber=transcriber,
-        gpu=gpu or OllamaClient(settings.ollama_url),
-        events=events,
+
+    def uow() -> SqlUnitOfWork:
+        return SqlUnitOfWork(engine)
+
+    transcription = TranscriptionJobHandler(uow, FileAudioStorage(settings.meetings_dir), transcriber,
+                                            gpu or OllamaClient(settings.ollama_url), events)
+    minutes = MinutesJobHandler(
+        uow,
+        MinutesWriter(chat or OllamaChat(settings.ollama_url, settings.llm_context_tokens), settings.minutes_chunk_chars),
+        MarkdownContextSource(settings.context_dir, settings.context_max_chars),
+        transcriber,
+        events,
     )
 
     def kind_of(job_id: str) -> JobKind | None:
@@ -44,7 +55,7 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
             job = session.get(Job, job_id)
             return job.kind if job else None
 
-    worker = GpuWorker({JobKind.transcribe: handler}, kind_of)
+    worker = GpuWorker({JobKind.transcribe: transcription, JobKind.minutes: minutes}, kind_of)
     return Container(engine, events, worker, transcriber)
 
 

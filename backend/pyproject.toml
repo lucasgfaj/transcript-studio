@@ -11,6 +11,7 @@ dependencies = [
     "nvidia-cublas-cu12>=12.9.2.10 ; sys_platform == 'linux'",
     "nvidia-cudnn-cu12==9.* ; sys_platform == 'linux'",
     "pydantic-settings>=2.16.0",
+    "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
     "sqlmodel>=0.0.48",
 ]

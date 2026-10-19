@@ -1,6 +1,7 @@
 """Transcript and minutes of a meeting: reading, manual editing and versioning."""
 from __future__ import annotations
 
+from transcript_studio.domain.errors import NotFoundError
 from transcript_studio.domain.ports import MinutesRepository, SegmentRepository
 from transcript_studio.models import MeetingStatus, Minutes
 from transcript_studio.schemas.meeting import MinutesBundle, MinutesRead, MinutesVersion, SegmentRead, TranscriptRead
@@ -42,6 +43,13 @@ class MinutesService:
         current = MinutesRead.model_validate(versions[0], from_attributes=True) if versions else None
         return MinutesBundle(current=current,
                              history=[MinutesVersion.model_validate(v, from_attributes=True) for v in versions])
+
+    def version(self, meeting_id: str, version_id: int) -> MinutesRead:
+        meeting = self._meetings.get(meeting_id)
+        minutes = self._minutes.get(version_id)
+        if minutes is None or minutes.meeting_id != meeting.id:
+            raise NotFoundError(f"Versão {version_id} da ata não encontrada.")
+        return MinutesRead.model_validate(minutes, from_attributes=True)
 
     def add_version(self, meeting_id: str, markdown: str, model: str | None) -> MinutesBundle:
         """Never overwrites: every save becomes a new version in the history."""

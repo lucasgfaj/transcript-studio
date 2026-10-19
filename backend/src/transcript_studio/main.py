@@ -7,32 +7,33 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from transcript_studio.controllers import jobs, meetings, system
+from transcript_studio.controllers import jobs, meetings, models, system
 from transcript_studio.core import container as container_module
 from transcript_studio.core.config import Settings, get_settings
 from transcript_studio.core.db import make_engine
 from transcript_studio.domain.errors import ConflictError, InvalidAudioError, NotFoundError
-from transcript_studio.domain.ports import GpuReleaser, Transcriber
+from transcript_studio.domain.ports import ChatModel, GpuReleaser, Transcriber
 
 
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
-               gpu: GpuReleaser | None = None) -> FastAPI:
+               gpu: GpuReleaser | None = None, chat: ChatModel | None = None) -> FastAPI:
     settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.engine = make_engine(settings)
-        app.state.container = container_module.build_container(settings, app.state.engine, transcriber, gpu)
+        app.state.container = container_module.build_container(settings, app.state.engine, transcriber, gpu, chat)
         container_module.start(app.state.container, settings)
         yield
         container_module.stop(app.state.container)
         app.state.engine.dispose()
 
-    app = FastAPI(title="Transcript Studio", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Transcript Studio", version="0.3.0", lifespan=lifespan)
     app.include_router(system.router)
     app.include_router(meetings.router)
     app.include_router(jobs.router)
+    app.include_router(models.router)
 
     @app.exception_handler(NotFoundError)
     async def not_found(_request: Request, error: NotFoundError) -> JSONResponse:

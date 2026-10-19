@@ -2,12 +2,12 @@
 repositories/ and infrastructure/ and are wired in core/dependencies.py."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Literal, Protocol
 
-from transcript_studio.models import Job, Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import Job, JobKind, Meeting, MeetingStatus, Minutes, Segment
 
 # fast: batched, ~75x real time, paragraph-sized segments; detailed: sequential, ~32x, sentence timestamps
 TranscriptionMode = Literal["fast", "detailed"]
@@ -42,6 +42,29 @@ class Transcriber(Protocol):
     def unload(self) -> None: ...
 
 
+class GenerationCancelled(Exception):
+    pass
+
+
+class ChatModel(Protocol):
+    """A local or remote LLM that streams its answer as text pieces."""
+
+    def stream(self, model: str, system: str, prompt: str, should_stop: ShouldStop | None = None,
+               max_tokens: int | None = None) -> Iterator[str]: ...
+
+
+class ContextSource(Protocol):
+    """Reference text (glossary, people, companies) used only to disambiguate names in prompts."""
+
+    def load(self) -> str: ...
+
+
+class DocumentRenderer(Protocol):
+    """Turns minutes Markdown into a file format (e.g. DOCX)."""
+
+    def render(self, markdown: str) -> bytes: ...
+
+
 class GpuReleaser(Protocol):
     """Frees GPU memory held by other engines (e.g. Ollama) before a GPU job runs."""
 
@@ -65,7 +88,7 @@ class SegmentRepository(Protocol):
 class JobRepository(Protocol):
     def get(self, job_id: str) -> Job | None: ...
     def save(self, job: Job) -> Job: ...
-    def latest_for(self, meeting_id: str) -> Job | None: ...
+    def latest_for(self, meeting_id: str, kind: JobKind | None = None) -> Job | None: ...
     def active_for(self, meeting_id: str) -> Job | None: ...
     def list_active(self) -> list[Job]: ...
 
@@ -73,6 +96,7 @@ class JobRepository(Protocol):
 class MinutesRepository(Protocol):
     def list_for(self, meeting_id: str) -> list[Minutes]: ...
     def meeting_ids_with_minutes(self) -> set[str]: ...
+    def get(self, minutes_id: int) -> Minutes | None: ...
     def add(self, minutes: Minutes) -> Minutes: ...
 
 
@@ -82,6 +106,7 @@ class UnitOfWork(Protocol):
     jobs: JobRepository
     meetings: MeetingRepository
     segments: SegmentRepository
+    minutes: MinutesRepository
 
     def __enter__(self) -> UnitOfWork: ...
     def __exit__(self, *exc: object) -> None: ...

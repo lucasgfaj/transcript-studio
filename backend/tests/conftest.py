@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from transcript_studio.core.config import Settings
 from transcript_studio.domain.ports import (
-    OnSegment, ShouldStop, TranscribedSegment, TranscriptionCancelled, TranscriptionMode, TranscriptionResult,
+    GenerationCancelled, OnSegment, ShouldStop, TranscribedSegment, TranscriptionCancelled, TranscriptionMode, TranscriptionResult,
 )
 from transcript_studio.main import create_app
 
@@ -57,7 +57,30 @@ class FakeTranscriber:
         self.warmed = True
 
     def unload(self) -> None:
-        pass
+        self.unloads = getattr(self, "unloads", 0) + 1
+
+
+class FakeChat:
+    """Streams a canned answer word by word; records every prompt it received."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+        self.answer = "# Ata\n\n## Decisões\n\n- Orçamento **aprovado**.\n\n## Tarefas\n\n- [ ] Bruno envia o orçamento.\n"
+        self.gate: threading.Event | None = None
+        self.max_tokens: list[int | None] = []
+
+    def stream(self, model: str, system: str, prompt: str, should_stop: ShouldStop | None = None,
+               max_tokens: int | None = None) -> Iterator[str]:
+        self.calls.append((model, system, prompt))
+        self.max_tokens.append(max_tokens)
+        final = "Elabore a ata" in prompt
+        words = (self.answer if final else "Nota: orçamento aprovado.").split(" ")
+        for index, word in enumerate(words):
+            if index == 2 and self.gate is not None:
+                while not self.gate.wait(0.02):
+                    if should_stop and should_stop():
+                        raise GenerationCancelled()
+            yield word if index == len(words) - 1 else word + " "
 
 
 class FakeGpu:
@@ -84,6 +107,11 @@ def gpu() -> FakeGpu:
 
 
 @pytest.fixture
-def client(settings: Settings, transcriber: FakeTranscriber, gpu: FakeGpu) -> Iterator[TestClient]:
-    with TestClient(create_app(settings, transcriber=transcriber, gpu=gpu)) as test_client:
+def chat() -> FakeChat:
+    return FakeChat()
+
+
+@pytest.fixture
+def client(settings: Settings, transcriber: FakeTranscriber, gpu: FakeGpu, chat: FakeChat) -> Iterator[TestClient]:
+    with TestClient(create_app(settings, transcriber=transcriber, gpu=gpu, chat=chat)) as test_client:
         yield test_client

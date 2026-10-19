@@ -5,7 +5,7 @@ from sqlalchemy import String, cast
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, delete, or_, select
 
-from transcript_studio.models import Job, JobStatus, Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import Job, JobKind, JobStatus, Meeting, MeetingStatus, Minutes, Segment
 
 
 class SqlMeetingRepository:
@@ -71,6 +71,7 @@ class SqlUnitOfWork:
         self.jobs = SqlJobRepository(self._session)
         self.meetings = SqlMeetingRepository(self._session)
         self.segments = SqlSegmentRepository(self._session)
+        self.minutes = SqlMinutesRepository(self._session)
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -90,8 +91,10 @@ class SqlJobRepository:
         self._session.refresh(job)
         return job
 
-    def latest_for(self, meeting_id: str) -> Job | None:
+    def latest_for(self, meeting_id: str, kind: JobKind | None = None) -> Job | None:
         statement = select(Job).where(Job.meeting_id == meeting_id).order_by(col(Job.created_at).desc())
+        if kind:
+            statement = statement.where(Job.kind == kind)
         return self._session.exec(statement.limit(1)).first()
 
     def active_for(self, meeting_id: str) -> Job | None:
@@ -116,6 +119,9 @@ class SqlMinutesRepository:
 
     def meeting_ids_with_minutes(self) -> set[str]:
         return set(self._session.exec(select(Minutes.meeting_id).distinct()).all())
+
+    def get(self, minutes_id: int) -> Minutes | None:
+        return self._session.get(Minutes, minutes_id)
 
     def add(self, minutes: Minutes) -> Minutes:
         self._session.add(minutes)

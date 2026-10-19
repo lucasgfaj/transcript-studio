@@ -13,6 +13,7 @@ from transcript_studio.models.meeting import utcnow
 
 class JobKind(str, Enum):
     transcribe = "transcribe"
+    minutes = "minutes"
 
 
 class JobStatus(str, Enum):

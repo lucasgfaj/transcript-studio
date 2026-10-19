@@ -1,7 +1,7 @@
 import { useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import {
-  ArrowLeft, CalendarDays, Clock, FileAudio, FileText, Loader2, MessagesSquare, MoreHorizontal, NotebookPen,
+  ArrowLeft, CalendarDays, Captions, Clock, Download, FileAudio, FileText, FileType, Loader2, MessagesSquare, MoreHorizontal, NotebookPen,
   Pencil, Trash2, Upload, Users,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -27,7 +27,7 @@ import { StatusBadge } from "@/components/meetings/status-badge"
 import { TranscribeBar } from "@/components/meetings/transcribe-bar"
 import { TranscriptPanel } from "@/components/meetings/transcript-panel"
 import { useTranscription } from "@/hooks/use-transcription"
-import { useDeleteAudio, useDeleteMeeting, useInvalidateMeeting, useMeeting, usePeaks } from "@/hooks/use-meetings"
+import { useDeleteAudio, useDeleteMeeting, useInvalidateMeeting, useMeeting, usePeaks, useTranscript } from "@/hooks/use-meetings"
 import { api, type Meeting } from "@/lib/api"
 import { formatBytes, formatDate, formatDuration } from "@/lib/format"
 
@@ -89,6 +89,7 @@ export function MeetingPage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [tab, setTab] = useState<string | null>(null)
   const transcription = useTranscription(id)
+  const timed = (useTranscript(id).data?.segments.length ?? 0) > 0
 
   if (isLoading) {
     return (
@@ -160,6 +161,36 @@ export function MeetingPage() {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                <Download /> Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild disabled={!meeting.has_minutes}>
+                <a href={api.exportUrl(meeting.id, "docx")} download>
+                  <FileType /> Ata (.docx)
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild disabled={!meeting.has_minutes}>
+                <a href={api.exportUrl(meeting.id, "md")} download>
+                  <NotebookPen /> Ata (.md)
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild disabled={!meeting.has_transcript}>
+                <a href={api.exportUrl(meeting.id, "txt")} download>
+                  <FileText /> Transcrição (.txt)
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild disabled={!timed}>
+                <a href={api.exportUrl(meeting.id, "srt")} download title={timed ? undefined : "Transcreva com o Whisper para ter marcações de tempo"}>
+                  <Captions /> Legendas (.srt)
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" aria-label="Mais ações">
                 {replacing ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
               </Button>
@@ -197,10 +228,10 @@ export function MeetingPage() {
 
       <AudioCard meeting={meeting} playerRef={playerRef} onTime={setCurrentTime} />
 
-      {meeting.has_audio && <TranscribeBar transcription={transcription} hasTranscript={meeting.has_transcript} />}
+      {meeting.has_audio && <TranscribeBar transcription={transcription} hasTranscript={meeting.has_transcript} busy={meeting.status === "generating"} />}
 
       <Tabs
-        value={transcription.active ? "transcript" : tab ?? (meeting.has_minutes ? "minutes" : "transcript")}
+        value={transcription.active ? "transcript" : tab ?? (meeting.has_minutes || meeting.status === "generating" ? "minutes" : "transcript")}
         onValueChange={setTab}
       >
         <TabsList variant="line" className="w-full justify-start border-b pb-0">
@@ -223,7 +254,7 @@ export function MeetingPage() {
           />
         </TabsContent>
         <TabsContent value="minutes" className="pt-4">
-          <MinutesPanel meetingId={meeting.id} title={meeting.title} />
+          <MinutesPanel meetingId={meeting.id} title={meeting.title} hasTranscript={meeting.has_transcript} />
         </TabsContent>
         <TabsContent value="chat" className="pt-4">
           <ChatPanel />

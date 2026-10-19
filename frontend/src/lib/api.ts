@@ -70,15 +70,16 @@ export interface Health {
   queued_jobs: number
 }
 
+export type JobKind = "transcribe" | "minutes"
 export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled"
 export type TranscriptionMode = "fast" | "detailed"
 
 export interface Job {
   id: string
   meeting_id: string
-  kind: "transcribe"
+  kind: JobKind
   status: JobStatus
-  params: { language?: string | null; mode?: TranscriptionMode }
+  params: { language?: string | null; mode?: TranscriptionMode; model?: string }
   progress: number
   message: string | null
   error: string | null
@@ -97,12 +98,27 @@ export interface LiveSegment {
 }
 
 export type JobEvent =
-  | { type: "snapshot"; job: Job; segments: LiveSegment[] }
-  | { type: "status"; status: JobStatus; message: string }
+  | { type: "snapshot"; job: Job; segments: LiveSegment[]; text: string }
+  | { type: "status"; status: JobStatus; message: string; progress?: number }
   | { type: "segments"; segments: LiveSegment[]; progress: number }
+  | { type: "token"; text: string }
   | { type: "done" | "error" | "cancelled"; job: Job }
 
 export const isActive = (job: Job | null | undefined) => job?.status === "queued" || job?.status === "running"
+
+export interface LlmModel {
+  name: string
+  size: number | null
+  parameter_size: string | null
+  quantization: string | null
+  family: string | null
+}
+
+export interface ModelsInfo {
+  default: string
+  available: boolean
+  models: LlmModel[]
+}
 
 export class ApiError extends Error {
   readonly status: number
@@ -190,7 +206,13 @@ export const api = {
 
   transcribe: (id: string, options: { mode: TranscriptionMode; language: string | null }) =>
     request<Job>(`/api/meetings/${id}/transcribe`, { method: "POST", body: JSON.stringify(options) }),
-  latestJob: (id: string) => request<Job | null>(`/api/meetings/${id}/job`),
+  latestJob: (id: string, kind: JobKind) => request<Job | null>(`/api/meetings/${id}/job?kind=${kind}`),
+  generateMinutes: (id: string, model: string | null) =>
+    request<Job>(`/api/meetings/${id}/minutes/generate`, { method: "POST", body: JSON.stringify({ model }) }),
+  minutesVersion: (id: string, versionId: number) =>
+    request<MinutesVersion & { markdown: string }>(`/api/meetings/${id}/minutes/${versionId}`),
+  exportUrl: (id: string, format: "md" | "docx" | "txt" | "srt") => `/api/meetings/${id}/export?format=${format}`,
+  models: () => request<ModelsInfo>("/api/models"),
   cancelJob: (jobId: string) => request<Job>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
   jobEventsUrl: (jobId: string) => `/api/jobs/${jobId}/events`,
 

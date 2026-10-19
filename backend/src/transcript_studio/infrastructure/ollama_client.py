@@ -21,6 +21,9 @@ class OllamaClient:
         except (OSError, ValueError):
             return None
 
+    def list_models(self) -> list[dict[str, Any]]:
+        return list(self._get("/api/tags").get("models", []))
+
     def loaded_models(self) -> list[str]:
         return [model["name"] for model in self._get("/api/ps").get("models", [])]
 

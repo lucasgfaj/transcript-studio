@@ -15,9 +15,11 @@ from transcript_studio.infrastructure.waveform import CachedWaveform
 from transcript_studio.repositories.sql import (
     SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository,
 )
+from transcript_studio.infrastructure.docx_renderer import DocxRenderer
 from transcript_studio.services.documents import MinutesService, TranscriptService
+from transcript_studio.services.export import ExportService
+from transcript_studio.services.jobs import JobService
 from transcript_studio.services.meetings import MeetingService
-from transcript_studio.services.transcription import JobService
 
 
 def get_settings(request: Request) -> Settings:
@@ -69,8 +71,18 @@ def get_container(request: Request) -> Container:
 ContainerDep = Annotated[Container, Depends(get_container)]
 
 
-def get_job_service(session: SessionDep, meetings: MeetingServiceDep, container: ContainerDep) -> JobService:
-    return JobService(SqlJobRepository(session), meetings, container.worker.submit, container.worker.cancel)
+def get_job_service(session: SessionDep, meetings: MeetingServiceDep, container: ContainerDep,
+                    settings: SettingsDep) -> JobService:
+    return JobService(SqlJobRepository(session), SqlMinutesRepository(session), meetings, container.worker.submit,
+                      container.worker.cancel, settings.default_llm)
 
 
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
+
+
+def get_export_service(meetings: MeetingServiceDep, transcripts: TranscriptServiceDep,
+                       minutes: MinutesServiceDep) -> ExportService:
+    return ExportService(meetings, transcripts, minutes, DocxRenderer())
+
+
+ExportServiceDep = Annotated[ExportService, Depends(get_export_service)]

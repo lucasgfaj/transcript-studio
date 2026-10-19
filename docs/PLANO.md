@@ -147,7 +147,7 @@ Em ordem de impacto:
 | 0. Estrutura ✅ | Pastas, uv, Vite, Tailwind, shadcn, `agent-chat.tsx` em `src/components/ui`, script `dev.sh` | `./dev.sh` sobe a API e o front, e a página do demo aparece |
 | 1. Banco e CRUD ✅ | Tabelas, CRUD de reuniões, upload e player de áudio, importação do transcript-mk | As 8 reuniões antigas aparecem na Biblioteca com áudio tocando |
 | 2. Transcrição ✅ | Fila de GPU, jobs, SSE, modo em lote, timestamps, benchmark | Feito: 70 min em 82 s com progresso e texto ao vivo (ver README) |
-| 3. Ata | Streaming de tokens, editor, histórico, exportar md/docx | Gerar, editar e baixar a ata pela interface |
+| 3. Ata ✅ | Streaming de tokens, editor, histórico, exportar md/docx/txt/srt | Feito: ata de 32 min em 44 s com qwen3.5:4b, com texto ao vivo e histórico |
 | 4. Interface | Biblioteca, página da reunião, transcrição clicável, tema escuro | Fluxo completo pela interface, também no celular |
 | 5. Gravação e ao vivo | MediaRecorder, WebSocket com VAD | Gravar pelo navegador e ver o texto aparecer |
 | 6. Modelos e contexto | Tela de modelos (baixar, apagar, padrão), editor de contexto | Baixar um modelo novo pela interface e usá-lo na ata |
