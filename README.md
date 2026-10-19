@@ -4,6 +4,18 @@ App web local para importar, gravar, transcrever e gerar atas de reuniões. O ba
 
 O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)** e **5 (gravação ao vivo)**.
 
+## Ao vivo (fase 5)
+
+Em **Ao vivo**, grave pelo microfone e veja o texto aparecer a cada pausa na fala. O áudio é gravado no servidor enquanto você fala, então fechar a aba ou cair a conexão não perde nada. Ao parar, a reunião é salva com áudio e transcrição com horários. Depois dá para usar "Transcrever de novo" no modo Detalhado e gerar a ata.
+
+Teste com 2 minutos de uma reunião real enviados em tempo real (RTX 4050): 27 trechos, **texto em mediana 1,4 s depois da pausa** (pior caso 8,3 s num trecho longo sem pausa).
+
+Como funciona:
+- O navegador captura com um **AudioWorklet**, converte para 16 kHz mono PCM16 e envia blocos de 250 ms por WebSocket (`/api/live`).
+- O servidor corta a fala em **pausas** de 0,6 s (`services/live_segmenter.py`). Mínimo de 2 s, e um corte forçado a cada 15 s no ponto mais silencioso. Silêncio não vai para o Whisper, o que evita frases inventadas.
+- Cada trecho vai para o Whisper com as últimas frases como contexto, para manter nomes e grafia.
+- Enquanto grava, a **fila de GPU pausa**: tarefas novas esperam, e o Ollama é descarregado.
+
 ## Interface (fase 4)
 
 - **Busca rápida (Ctrl+K / ⌘K):** acha qualquer reunião pelo título, pelos participantes ou por algo que foi dito, e tem atalhos para nova reunião e troca de tema.
