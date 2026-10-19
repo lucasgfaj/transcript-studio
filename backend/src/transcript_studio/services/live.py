@@ -4,6 +4,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
+
 from transcript_studio.domain.ports import AudioRecorder, TranscribedSegment, Transcriber
 from transcript_studio.models import MeetingSource
 from transcript_studio.schemas.meeting import MeetingCreate
@@ -12,6 +14,8 @@ from transcript_studio.services.live_segmenter import SAMPLE_RATE, LiveSegmenter
 from transcript_studio.services.meetings import MeetingService
 
 _PROMPT_CHARS = 200  # previous text given to Whisper so names and spelling stay consistent
+_DEAD_PEAK = 0.002   # below this the input is digital silence, not a quiet room
+_DEAD_SECONDS = 4
 
 
 class LiveSession:
@@ -23,6 +27,8 @@ class LiveSession:
         self._recorder = recorder
         self._segmenter = segmenter or LiveSegmenter()
         self.segments: list[TranscribedSegment] = []
+        self.silent = False           # True while the microphone has been delivering digital silence
+        self._quiet_samples = 0
 
     @property
     def seconds(self) -> float:
@@ -32,7 +38,16 @@ class LiveSession:
         """Called on the event loop for every audio block; cheap (no model work)."""
         samples = pcm16_to_float(pcm16)
         self._recorder.write(samples)
+        self._track_silence(samples)
         return self._segmenter.push(samples)
+
+    def _track_silence(self, samples: np.ndarray) -> None:
+        """A muted or wrong input device sends near-zero samples (peak ~0.0002); a quiet room never does."""
+        if len(samples) and float(np.abs(samples).max()) < _DEAD_PEAK:
+            self._quiet_samples += len(samples)
+        else:
+            self._quiet_samples = 0
+        self.silent = self._quiet_samples >= _DEAD_SECONDS * SAMPLE_RATE
 
     def finish(self) -> list[Utterance]:
         self._recorder.close()

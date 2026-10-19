@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, Loader2, Mic, MicOff, Pause, Play, Radio, RefreshCw, Square, Volume2 } from "lucide-react"
+import { AlertTriangle, Loader2, Mic, MicOff, Pause, Play, Radio, RefreshCw, ScanSearch, Square, Volume2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -63,11 +63,63 @@ function MicrophonePicker({ mic, disabled }: { mic: ReturnType<typeof useMicroph
             <option key={device.id} value={device.id}>{device.label}</option>
           ))}
         </select>
-        <Button variant="outline" size="icon" disabled={disabled} onClick={() => void mic.retry()} title="Reabrir o microfone" aria-label="Reabrir o microfone">
+        <Button variant="outline" size="icon" disabled={disabled || !!mic.scanning} onClick={() => void mic.retry()} title="Reabrir o microfone" aria-label="Reabrir o microfone">
           <RefreshCw className={cn(mic.status === "requesting" && "animate-spin")} />
         </Button>
       </div>
+      <Button variant="secondary" size="sm" className="w-fit" disabled={disabled || !!mic.scanning} onClick={() => void mic.scan()}>
+        {mic.scanning ? <Loader2 className="animate-spin" /> : <ScanSearch />}
+        {mic.scanning ? `Testando ${mic.scanning.index} de ${mic.scanning.total}: fale sem parar…` : "Encontrar meu microfone"}
+      </Button>
+      {mic.scanning && <p className="truncate text-xs text-muted-foreground">Ouvindo: {mic.scanning.label}</p>}
+      {mic.scanResults && !mic.scanning && <ScanResults results={mic.scanResults} chosen={mic.deviceId} />}
     </div>
+  )
+}
+
+function ScanResults({ results, chosen }: { results: ReturnType<typeof useMicrophone>["scanResults"] & object; chosen: string }) {
+  const heard = results.some((r) => r.level > 0.2)
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border p-2 text-xs">
+      <span className={cn("font-medium", heard ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+        {heard ? "Escolhi o microfone que mais captou a sua voz:" : "Nenhum microfone captou som. Veja as dicas abaixo."}
+      </span>
+      {results.map((result) => (
+        <div key={result.id} className="flex items-center gap-2">
+          <span className={cn("min-w-0 flex-1 truncate", result.id === chosen && heard && "font-medium")}>
+            {result.id === chosen && heard ? "✓ " : ""}{result.label}
+          </span>
+          {result.level < 0 ? (
+            <span className="text-muted-foreground">não abriu</span>
+          ) : (
+            <span className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+              <span className={cn("block h-full", result.level > 0.2 ? "bg-emerald-500" : "bg-muted-foreground/40")} style={{ width: `${Math.max(3, result.level * 100)}%` }} />
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Diagnostics({ mic }: { mic: ReturnType<typeof useMicrophone> }) {
+  if (mic.status !== "ready") return null
+  return (
+    <p className="max-w-full truncate text-center text-[11px] text-muted-foreground tabular-nums">
+      Chrome está usando: {mic.trackLabel ?? "?"} · {mic.db <= -99 ? "sem sinal" : `${mic.db} dB`}
+    </p>
+  )
+}
+
+function NoSoundTips() {
+  return (
+    <ul className="max-w-md list-disc space-y-1 pl-5 text-left text-xs text-muted-foreground">
+      <li>Use “Encontrar meu microfone” e fale enquanto ele testa cada um.</li>
+      <li>Windows: Configurações → Privacidade e segurança → Microfone → ative “Permitir que aplicativos da área de trabalho acessem o microfone”.</li>
+      <li>Windows: Configurações → Sistema → Som → Entrada: confira se o volume não está zerado ou mudo.</li>
+      <li>Chrome: clique no cadeado da barra de endereço → Microfone → escolha o dispositivo certo.</li>
+      <li>Se o fone tem botão de mudo, desligue-o.</li>
+    </ul>
   )
 }
 
@@ -155,6 +207,20 @@ export function LivePage() {
       <Card className={cn(recording && "border-red-500/40")}>
         <CardContent className="flex flex-col items-center gap-4 py-4">
           <LevelMeter level={live.state === "paused" ? 0 : mic.level} recording={live.state === "recording"} />
+          <Diagnostics mic={mic} />
+          {mic.trackMuted && (
+            <p className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+              <MicOff className="size-4" /> O sistema está silenciando este microfone (mudo no Windows ou no fone).
+            </p>
+          )}
+          {recording && live.serverSilent && (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/5 p-3">
+              <p className="flex items-center gap-2 text-sm font-medium text-red-600 dark:text-red-400">
+                <AlertTriangle className="size-4" /> O servidor está recebendo só silêncio deste microfone.
+              </p>
+              <p className="text-xs text-muted-foreground">Pare a gravação e use “Encontrar meu microfone”.</p>
+            </div>
+          )}
 
           {!busy && mic.status === "ready" && !mic.suspended && (
             <p className={cn("flex items-center gap-1.5 text-sm", heard ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
@@ -162,6 +228,7 @@ export function LivePage() {
               {heard ? "Estou ouvindo você. Pode gravar." : "Fale algo para testar: as barras devem subir com a sua voz."}
             </p>
           )}
+          {!busy && mic.status === "ready" && !heard && mic.db <= -70 && <NoSoundTips />}
           {mic.suspended && mic.status === "ready" && (
             <Button variant="outline" onClick={() => void mic.resume()}>
               <Volume2 /> Ativar o áudio do navegador

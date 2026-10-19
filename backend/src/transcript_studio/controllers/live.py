@@ -5,6 +5,7 @@ Protocol (JSON text frames + binary audio):
   server → {"type": "ready", "meeting_id": str, "gpu_busy": bool}
   client → binary: PCM 16-bit little-endian, 16 kHz, mono (any block size)
   server → {"type": "segment", "start": float, "end": float, "text": str}   (as utterances finish)
+  server → {"type": "silence", "silent": bool}   (the microphone sends digital silence for 4 s / recovered)
   client → {"type": "stop"}
   server → {"type": "saved", "meeting_id": str, "segments": int} | {"type": "discarded"}
 Closing the socket without "stop" still saves what was recorded.
@@ -82,8 +83,11 @@ async def live(websocket: WebSocket) -> None:
                 if message["type"] == "websocket.disconnect":
                     break
                 if message.get("bytes"):
+                    was_silent = session.silent
                     for utterance in session.push(message["bytes"]):
                         utterances.put_nowait(utterance)
+                    if session.silent != was_silent:
+                        await websocket.send_json({"type": "silence", "silent": session.silent})
                 elif message.get("text") and _is_stop(message["text"]):
                     break
         except WebSocketDisconnect:

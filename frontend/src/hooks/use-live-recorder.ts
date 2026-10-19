@@ -11,6 +11,7 @@ export type LiveState = "idle" | "connecting" | "recording" | "paused" | "saving
 type ServerMessage =
   | { type: "ready"; meeting_id: string; gpu_busy: boolean }
   | { type: "segment"; start: number; end: number; text: string }
+  | { type: "silence"; silent: boolean }
   | { type: "saved"; meeting_id: string; segments: number }
   | { type: "discarded" }
 
@@ -29,6 +30,7 @@ export function useLiveRecorder(sink: RefObject<((pcm: ArrayBuffer) => void) | n
   const [sentSeconds, setSentSeconds] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [gpuBusy, setGpuBusy] = useState(false)
+  const [serverSilent, setServerSilent] = useState(false)
   const [meetingId, setMeetingId] = useState<string | null>(null)
   const [result, setResult] = useState<"saved" | "discarded" | null>(null)
   const socket = useRef<WebSocket | null>(null)
@@ -52,6 +54,7 @@ export function useLiveRecorder(sink: RefObject<((pcm: ArrayBuffer) => void) | n
     setResult(null)
     setElapsed(0)
     setSentSeconds(0)
+    setServerSilent(false)
     setState("connecting")
     const ws = new WebSocket(socketUrl())
     ws.binaryType = "arraybuffer"
@@ -83,6 +86,8 @@ export function useLiveRecorder(sink: RefObject<((pcm: ArrayBuffer) => void) | n
         setState("recording")
       } else if (message.type === "segment") {
         setSegments((previous) => [...previous, message])
+      } else if (message.type === "silence") {
+        setServerSilent(message.silent)
       } else {
         setResult(message.type)
         setState("saved")
@@ -108,5 +113,5 @@ export function useLiveRecorder(sink: RefObject<((pcm: ArrayBuffer) => void) | n
     socket.current?.send(JSON.stringify({ type: "stop" }))
   }, [detach])
 
-  return { state, segments, elapsed, sentSeconds, error, gpuBusy, meetingId, result, start, togglePause, stop }
+  return { state, segments, elapsed, sentSeconds, serverSilent, error, gpuBusy, meetingId, result, start, togglePause, stop }
 }

@@ -62,6 +62,19 @@ def test_live_recording_streams_segments_and_saves_the_meeting(client: TestClien
     assert client.get(f"/api/meetings/{meeting_id}/audio", headers={"Range": "bytes=0-43"}).status_code == 206
 
 
+def test_warns_when_the_microphone_sends_only_silence(client: TestClient) -> None:
+    dead = (np.random.default_rng(0).uniform(-0.0002, 0.0002, 16_000 * 5)).astype(np.float32)  # like a muted mic
+    with client.websocket_connect("/api/live") as ws:
+        ws.send_json({"type": "start", "title": "Mudo"})
+        ws.receive_json()
+        stream(ws, dead)
+        assert ws.receive_json() == {"type": "silence", "silent": True}
+        stream(ws, tone(0.5))
+        assert ws.receive_json() == {"type": "silence", "silent": False}
+        ws.send_json({"type": "stop"})
+        until(ws, "saved")
+
+
 def test_closing_the_tab_still_saves(client: TestClient) -> None:
     with client.websocket_connect("/api/live") as ws:
         ws.send_json({"type": "start", "title": "Fechou a aba"})
