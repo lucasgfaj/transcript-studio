@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { useNavigate } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowRight, FileText, Loader2, Mic, Upload } from "lucide-react"
+import { ArrowRight, FileText, Loader2, Mic, Radio, Upload } from "lucide-react"
 import { toast } from "sonner"
 
 import { useDocumentTitle } from "@/hooks/use-document-title"
@@ -86,6 +86,18 @@ export function NewMeetingPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Link
+        to="/ao-vivo"
+        className="flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm transition-colors hover:bg-red-500/10"
+      >
+        <Radio className="size-4 text-red-500" />
+        <span className="flex-1">
+          <span className="font-medium">Quer ver o texto enquanto fala?</span>{" "}
+          <span className="text-muted-foreground">Use a gravação ao vivo.</span>
+        </span>
+        <ArrowRight className="size-4 text-muted-foreground" />
+      </Link>
 
       <Card>
         <CardContent>

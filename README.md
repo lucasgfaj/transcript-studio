@@ -2,7 +2,7 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)** e **4 (acabamento da interface)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)** e **5 (gravação ao vivo)**.
 
 ## Interface (fase 4)
 
@@ -131,6 +131,7 @@ backend/src/transcript_studio/
 | GET | `/api/meetings/{id}/minutes/{versão}` (uma versão antiga da ata) |
 | GET | `/api/meetings/{id}/export?format=md\|docx\|txt\|srt` |
 | GET | `/api/models` (modelos instalados no Ollama e o padrão) |
+| WS | `/api/live` (gravação ao vivo; protocolo documentado em `controllers/live.py`) |
 | GET | `/api/health` (status do Ollama e da fila de GPU) |
 
 A documentação interativa fica em http://localhost:8000/docs.

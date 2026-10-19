@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 // Each page is its own chunk: the meeting page alone pulls in wavesurfer and the Markdown renderer.
 const LibraryPage = lazy(() => import("@/pages/library-page").then((m) => ({ default: m.LibraryPage })))
 const NewMeetingPage = lazy(() => import("@/pages/new-meeting-page").then((m) => ({ default: m.NewMeetingPage })))
+const LivePage = lazy(() => import("@/pages/live-page").then((m) => ({ default: m.LivePage })))
 const MeetingPage = lazy(() => import("@/pages/meeting-page").then((m) => ({ default: m.MeetingPage })))
 
 function PageFallback() {
@@ -39,6 +40,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LibraryPage />} />
             <Route path="/nova" element={<NewMeetingPage />} />
+            <Route path="/ao-vivo" element={<LivePage />} />
             <Route path="/reunioes/:id" element={<MeetingPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

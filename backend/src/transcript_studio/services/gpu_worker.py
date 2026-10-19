@@ -37,6 +37,8 @@ class GpuWorker:
         self._cancelled: set[str] = set()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
+        self._holds = 0
+        self._idle = threading.Condition()
         self.current: str | None = None
 
     def start(self) -> None:
@@ -65,6 +67,20 @@ class GpuWorker:
         with self._lock:
             return job_id in self._cancelled
 
+    def hold(self) -> None:
+        """Live recording owns the GPU: queued jobs wait (the running one finishes) until release()."""
+        with self._idle:
+            self._holds += 1
+
+    def release(self) -> None:
+        with self._idle:
+            self._holds = max(0, self._holds - 1)
+            self._idle.notify_all()
+
+    @property
+    def held(self) -> bool:
+        return self._holds > 0
+
     def pending(self) -> int:
         return self._queue.qsize()
 
@@ -77,6 +93,8 @@ class GpuWorker:
                     log.exception("GPU task failed")
                 continue
             job_id = item
+            with self._idle:
+                self._idle.wait_for(lambda: self._holds == 0)
             kind = self._kind_of(job_id)
             handler = self._handlers.get(kind) if kind else None
             if handler is None:

@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from transcript_studio.domain.errors import NotFoundError
-from transcript_studio.domain.ports import MinutesRepository, SegmentRepository
-from transcript_studio.models import MeetingStatus, Minutes
+from transcript_studio.domain.ports import MinutesRepository, SegmentRepository, TranscribedSegment
+from transcript_studio.models import MeetingStatus, Minutes, Segment
 from transcript_studio.schemas.meeting import MinutesBundle, MinutesRead, MinutesVersion, SegmentRead, TranscriptRead
 from transcript_studio.services.meetings import MeetingService
 
@@ -27,6 +27,20 @@ class TranscriptService:
             self._segments.delete_for(meeting.id)
         meeting.transcript = text or None
         if text and meeting.status in (MeetingStatus.draft, MeetingStatus.audio_ready, MeetingStatus.error):
+            meeting.status = MeetingStatus.transcribed
+        self._meetings.touch(meeting)
+        return self.read(meeting_id)
+
+
+    def set_segments(self, meeting_id: str, segments: list[TranscribedSegment]) -> TranscriptRead:
+        """Stores a machine transcript (live recording) with its timestamps."""
+        meeting = self._meetings.get(meeting_id)
+        self._segments.replace_for(meeting.id, [
+            Segment(meeting_id=meeting.id, idx=i, start=round(s.start, 2), end=round(s.end, 2), text=s.text)
+            for i, s in enumerate(segments)
+        ])
+        meeting.transcript = "\n".join(s.text for s in segments) or None
+        if meeting.transcript and meeting.status in (MeetingStatus.draft, MeetingStatus.audio_ready, MeetingStatus.error):
             meeting.status = MeetingStatus.transcribed
         self._meetings.touch(meeting)
         return self.read(meeting_id)

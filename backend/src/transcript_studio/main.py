@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from transcript_studio.controllers import jobs, meetings, models, system
+from transcript_studio.controllers import jobs, live, meetings, models, system
 from transcript_studio.core import container as container_module
 from transcript_studio.core.config import Settings, get_settings
 from transcript_studio.core.db import make_engine
@@ -34,6 +34,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     app.include_router(meetings.router)
     app.include_router(jobs.router)
     app.include_router(models.router)
+    app.include_router(live.router)
 
     @app.exception_handler(NotFoundError)
     async def not_found(_request: Request, error: NotFoundError) -> JSONResponse:

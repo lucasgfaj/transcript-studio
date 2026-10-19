@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Literal, Protocol
+from typing import Any, BinaryIO, Literal, Protocol
 
 from transcript_studio.models import Job, JobKind, Meeting, MeetingStatus, Minutes, Segment
 
@@ -38,6 +38,10 @@ ShouldStop = Callable[[], bool]
 class Transcriber(Protocol):
     def transcribe(self, audio: Path, language: str | None = "pt", mode: TranscriptionMode = "fast",
                    on_segment: OnSegment | None = None, should_stop: ShouldStop | None = None) -> TranscriptionResult: ...
+    def transcribe_samples(self, samples: Any, language: str | None = "pt", offset: float = 0.0,
+                           prompt: str | None = None) -> list[TranscribedSegment]:
+        """Live mode: one utterance (16 kHz float32); `prompt` is the previous text for continuity."""
+        ...
     def warm_up(self) -> None: ...
     def unload(self) -> None: ...
 
@@ -110,6 +114,15 @@ class UnitOfWork(Protocol):
 
     def __enter__(self) -> UnitOfWork: ...
     def __exit__(self, *exc: object) -> None: ...
+
+
+class AudioRecorder(Protocol):
+    """Writes a live stream to disk while it is being recorded."""
+
+    path: Path
+
+    def write(self, samples: Any) -> None: ...
+    def close(self) -> None: ...
 
 
 class StoredAudio(Protocol):

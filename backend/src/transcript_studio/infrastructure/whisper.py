@@ -77,6 +77,17 @@ class FasterWhisperTranscriber:
                     on_segment(item, info.duration)
             return TranscriptionResult(segments=collected, duration=float(info.duration), language=info.language)
 
+    def transcribe_samples(self, samples: Any, language: str | None = "pt", offset: float = 0.0,
+                           prompt: str | None = None) -> list[TranscribedSegment]:
+        with self._lock:
+            model, _batched = self._load()
+            segments, _info = model.transcribe(
+                samples, language=language or None, beam_size=5, vad_filter=True,
+                condition_on_previous_text=False, initial_prompt=prompt or None,
+            )
+            return [TranscribedSegment(offset + float(s.start), offset + float(s.end), s.text.strip())
+                    for s in segments if s.text.strip()]
+
     def warm_up(self) -> None:
         """Loads the model ahead of time: a cold first load took ~30 s, a warm job on 3 min of audio ~4 s."""
         with self._lock:

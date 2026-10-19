@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { Link, NavLink } from "react-router"
-import { AudioLines, BookText, Boxes, Library, Menu, Plus, Search, X } from "lucide-react"
+import { AudioLines, BookText, Boxes, Library, Menu, Plus, Radio, Search, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { CommandPalette, SearchButton } from "@/components/command-palette"
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 const nav = [
   { to: "/", label: "Reuniões", icon: Library, end: true },
   { to: "/nova", label: "Nova reunião", icon: Plus },
+  { to: "/ao-vivo", label: "Ao vivo", icon: Radio },
   { to: "/modelos", label: "Modelos", icon: Boxes, soon: true },
   { to: "/contexto", label: "Contexto", icon: BookText, soon: true },
 ]

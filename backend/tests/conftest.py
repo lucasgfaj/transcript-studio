@@ -7,6 +7,7 @@ import threading
 import wave
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +39,7 @@ class FakeTranscriber:
         self.calls: list[tuple[Path, str | None, TranscriptionMode]] = []
         self.gate: threading.Event | None = None
         self.started = threading.Event()
+        self.live_prompts: list[str | None] = []
         self.segments = [TranscribedSegment(0.0, 2.5, "Bom dia a todos."), TranscribedSegment(2.5, 6.0, "Vamos começar.")]
 
     def transcribe(self, audio: Path, language: str | None = "pt", mode: TranscriptionMode = "fast",
@@ -52,6 +54,12 @@ class FakeTranscriber:
             if on_segment:
                 on_segment(segment, 6.0)
         return TranscriptionResult(list(self.segments), 6.0, "pt")
+
+    def transcribe_samples(self, samples: Any, language: str | None = "pt", offset: float = 0.0,
+                           prompt: str | None = None) -> list[TranscribedSegment]:
+        self.live_prompts.append(prompt)
+        duration = len(samples) / 16_000
+        return [TranscribedSegment(offset, offset + duration, f"trecho {len(self.live_prompts)}")]
 
     def warm_up(self) -> None:
         self.warmed = True

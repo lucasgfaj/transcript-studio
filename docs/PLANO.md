@@ -149,7 +149,7 @@ Em ordem de impacto:
 | 2. Transcrição ✅ | Fila de GPU, jobs, SSE, modo em lote, timestamps, benchmark | Feito: 70 min em 82 s com progresso e texto ao vivo (ver README) |
 | 3. Ata ✅ | Streaming de tokens, editor, histórico, exportar md/docx/txt/srt | Feito: ata de 32 min em 44 s com qwen3.5:4b, com texto ao vivo e histórico |
 | 4. Interface ✅ | Biblioteca, página da reunião, transcrição clicável, tema escuro, Ctrl+K, busca na transcrição, atalhos, fila da GPU | Feito: fluxo completo pela interface, também no celular |
-| 5. Gravação e ao vivo | MediaRecorder, WebSocket com VAD | Gravar pelo navegador e ver o texto aparecer |
+| 5. Gravação e ao vivo ✅ | MediaRecorder, WebSocket com corte nas pausas, fila de GPU pausada | Feito: texto ~1,4 s após cada pausa, áudio salvo durante a gravação |
 | 6. Modelos e contexto | Tela de modelos (baixar, apagar, padrão), editor de contexto | Baixar um modelo novo pela interface e usá-lo na ata |
 | 7. Chat | `AgentChat` ligado ao Ollama com o contexto da reunião | Perguntar sobre a reunião e receber a resposta em streaming |
 | 8. Acabamento | Testes, README, um comando para subir tudo | `pytest` e o build do front passam |

@@ -28,6 +28,7 @@ class Container:
     events: JobEvents
     worker: GpuWorker
     transcriber: Transcriber
+    gpu: GpuReleaser
 
 
 def build_container(settings: Settings, engine: Engine, transcriber: Transcriber | None = None,
@@ -36,12 +37,13 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
         from transcript_studio.infrastructure.whisper import FasterWhisperTranscriber
         transcriber = FasterWhisperTranscriber(settings.default_whisper, batch_size=settings.whisper_batch_size)
     events = JobEvents()
+    gpu = gpu or OllamaClient(settings.ollama_url)
 
     def uow() -> SqlUnitOfWork:
         return SqlUnitOfWork(engine)
 
     transcription = TranscriptionJobHandler(uow, FileAudioStorage(settings.meetings_dir), transcriber,
-                                            gpu or OllamaClient(settings.ollama_url), events)
+                                            gpu, events)
     minutes = MinutesJobHandler(
         uow,
         MinutesWriter(chat or OllamaChat(settings.ollama_url, settings.llm_context_tokens), settings.minutes_chunk_chars),
@@ -56,7 +58,7 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
             return job.kind if job else None
 
     worker = GpuWorker({JobKind.transcribe: transcription, JobKind.minutes: minutes}, kind_of)
-    return Container(engine, events, worker, transcriber)
+    return Container(engine, events, worker, transcriber, gpu)
 
 
 def start(container: Container, settings: Settings) -> None:
