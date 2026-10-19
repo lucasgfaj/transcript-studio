@@ -2,7 +2,19 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)**, **5 (gravação ao vivo)** e **6 (modelos e contexto)**.
+O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)**, **5 (gravação ao vivo)**, **6 (modelos e contexto)** e **7 (chat com a reunião)**.
+
+## Chat com a reunião (fase 7)
+
+Na aba **Chat** da reunião, pergunte qualquer coisa ("o que foi dito sobre a comissão?", "liste as tarefas"). A resposta vem do modelo local, em streaming, com base na ata e nos trechos da transcrição. Cada horário citado, como **[33:35]**, é um botão que toca o áudio a partir dali. A conversa fica salva por reunião e pode ser apagada.
+
+Como funciona:
+- **Busca de trechos** (`services/retrieval.py`): uma reunião de 70 min tem ~60 mil caracteres e não cabe na janela de 8 mil tokens do modelo. A transcrição vira passagens de ~1.000 caracteres, pontuadas pelas palavras raras da pergunta (sem acento, sem palavras vazias). Até 9 mil caracteres das melhores vão em ordem cronológica, com o horário de cada frase. Perguntas sem tema ("resuma") recebem trechos espalhados do começo ao fim.
+- **Horários confiáveis:** modelos pequenos inventam segundos dentro de um segmento de 30 s. Antes de salvar, cada citação é ajustada para o início do segmento que a contém (em teste real, 17 de 19 horários brutos não existiam; depois do ajuste, 0).
+- **GPU:** a resposta espera a tarefa em andamento terminar (e avisa), tira o Whisper da GPU e bloqueia novas tarefas até acabar. Durante uma gravação ao vivo o chat não roda.
+- **Parar:** o botão Parar corta o stream do Ollama na hora, e a resposta parcial fica salva como "interrompida".
+
+Medido na reunião de 70 min com qwen3.5:4b: **primeiro token em ~1 s**, resposta completa em 6 a 20 s.
 
 ## Modelos e contexto (fase 6)
 
@@ -155,6 +167,7 @@ backend/src/transcript_studio/
 | GET | `/api/models` (instalados, catálogo, Whisper) · POST `/api/models/pull` (progresso NDJSON) · DELETE `/api/models/{nome}` |
 | GET / PUT | `/api/preferences` (modelo padrão da ata, Whisper, limite do contexto) |
 | GET | `/api/context` · GET / PUT / DELETE `/api/context/file?path=` |
+| GET / POST / DELETE | `/api/meetings/{id}/chat` (histórico; pergunta com resposta em NDJSON: status, token, done, error; limpar) |
 | GET | `/api/health` (status do Ollama e da fila de GPU) |
 
 A documentação interativa fica em http://localhost:8000/docs.

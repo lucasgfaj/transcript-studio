@@ -81,6 +81,7 @@ class FakeChat:
         self.answer = "# Ata\n\n## Decisões\n\n- Orçamento **aprovado**.\n\n## Tarefas\n\n- [ ] Bruno envia o orçamento.\n"
         self.gate: threading.Event | None = None
         self.max_tokens: list[int | None] = []
+        self.chat_calls: list[tuple[str, list[dict[str, str]]]] = []
 
     def stream(self, model: str, system: str, prompt: str, should_stop: ShouldStop | None = None,
                max_tokens: int | None = None) -> Iterator[str]:
@@ -94,6 +95,16 @@ class FakeChat:
                     if should_stop and should_stop():
                         raise GenerationCancelled()
             yield word if index == len(words) - 1 else word + " "
+
+
+def _fake_stream_chat(self: FakeChat, model: str, messages: list[dict[str, str]], should_stop: ShouldStop | None = None,
+                      max_tokens: int | None = None) -> Iterator[str]:
+    self.chat_calls.append((model, messages))
+    for word in "Foi aprovado o orçamento [00:00] da obra.".split(" "):
+        yield word + " "
+
+
+FakeChat.stream_chat = _fake_stream_chat  # type: ignore[attr-defined]
 
 
 class FakeGpu:

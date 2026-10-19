@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO, Literal, Protocol
 
-from transcript_studio.models import Job, JobKind, Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import ChatMessage, Job, JobKind, Meeting, MeetingStatus, Minutes, Segment
 
 # fast: batched, ~75x real time, paragraph-sized segments; detailed: sequential, ~32x, sentence timestamps
 TranscriptionMode = Literal["fast", "detailed"]
@@ -58,6 +58,10 @@ class ChatModel(Protocol):
 
     def stream(self, model: str, system: str, prompt: str, should_stop: ShouldStop | None = None,
                max_tokens: int | None = None) -> Iterator[str]: ...
+    def stream_chat(self, model: str, messages: list[dict[str, str]], should_stop: ShouldStop | None = None,
+                    max_tokens: int | None = None) -> Iterator[str]:
+        """Multi-turn: messages are {role: system|user|assistant, content}."""
+        ...
 
 
 class ContextSource(Protocol):
@@ -105,6 +109,12 @@ class MinutesRepository(Protocol):
     def meeting_ids_with_minutes(self) -> set[str]: ...
     def get(self, minutes_id: int) -> Minutes | None: ...
     def add(self, minutes: Minutes) -> Minutes: ...
+
+
+class ChatRepository(Protocol):
+    def list_for(self, meeting_id: str) -> list[ChatMessage]: ...
+    def add(self, message: ChatMessage) -> ChatMessage: ...
+    def clear(self, meeting_id: str) -> None: ...
 
 
 class SettingRepository(Protocol):

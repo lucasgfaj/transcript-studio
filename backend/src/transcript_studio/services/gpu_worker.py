@@ -8,7 +8,9 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Protocol
 
 from transcript_studio.models import JobKind
@@ -76,6 +78,19 @@ class GpuWorker:
         with self._idle:
             self._holds = max(0, self._holds - 1)
             self._idle.notify_all()
+
+    @contextmanager
+    def exclusive(self, on_wait: Callable[[], None] | None = None) -> Iterator[None]:
+        """Interactive GPU use (chat): no new job starts, and the running one is allowed to finish first."""
+        self.hold()
+        try:
+            if self.current is not None and on_wait:
+                on_wait()
+            while self.current is not None:
+                time.sleep(0.2)
+            yield
+        finally:
+            self.release()
 
     @property
     def held(self) -> bool:

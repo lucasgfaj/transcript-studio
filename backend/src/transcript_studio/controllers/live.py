@@ -58,6 +58,7 @@ async def live(websocket: WebSocket) -> None:
 
     gpu_busy = container.worker.current is not None
     container.worker.hold()  # no new GPU job starts while recording
+    container.live_sessions += 1
     utterances: asyncio.Queue[Utterance | None] = asyncio.Queue()
     finished = False
 
@@ -109,6 +110,7 @@ async def live(websocket: WebSocket) -> None:
             session.finish()
             with contextlib.suppress(Exception):
                 _save(settings, engine, session, recording)
+        container.live_sessions -= 1
         container.worker.release()
 
 

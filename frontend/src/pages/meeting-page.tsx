@@ -260,7 +260,7 @@ export function MeetingPage() {
           <MinutesPanel meetingId={meeting.id} title={meeting.title} hasTranscript={meeting.has_transcript} />
         </TabsContent>
         <TabsContent value="chat" className="pt-4">
-          <ChatPanel />
+          <ChatPanel meetingId={meeting.id} ready={meeting.has_transcript || meeting.has_minutes} onSeek={(seconds) => playerRef.current?.seek(seconds)} />
         </TabsContent>
       </Tabs>
 

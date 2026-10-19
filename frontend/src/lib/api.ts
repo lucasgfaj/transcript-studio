@@ -108,6 +108,8 @@ export type JobEvent =
   | { type: "token"; text: string }
   | { type: "done" | "error" | "cancelled"; job: Job }
 
+const NEWLINE = String.fromCharCode(10)
+
 export const isActive = (job: Job | null | undefined) => job?.status === "queued" || job?.status === "running"
 
 export interface LlmModel {
@@ -170,6 +172,21 @@ export interface ContextOverview {
   used_chars: number
   files: ContextFile[]
 }
+
+export interface ChatMessage {
+  id: number
+  role: "user" | "assistant"
+  content: string
+  model: string | null
+  interrupted: boolean
+  created_at: string
+}
+
+export type ChatEvent =
+  | { type: "status"; message: string }
+  | { type: "token"; text: string }
+  | { type: "done"; message: ChatMessage }
+  | { type: "error"; message: string }
 
 export class ApiError extends Error {
   readonly status: number
@@ -289,6 +306,28 @@ export const api = {
   updatePreferences: (changes: Partial<Preferences>) =>
     request<Preferences>("/api/preferences", { method: "PUT", body: JSON.stringify(changes) }),
 
+  chatHistory: (id: string) => request<ChatMessage[]>(`/api/meetings/${id}/chat`),
+  clearChat: (id: string) => request<void>(`/api/meetings/${id}/chat`, { method: "DELETE" }),
+  /** Streams the answer (NDJSON). Aborting the signal stops the model on the server too. */
+  askChat: async (id: string, content: string, onEvent: (event: ChatEvent) => void, signal?: AbortSignal) => {
+    const response = await fetch(`/api/meetings/${id}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+      signal,
+    })
+    if (!response.ok || !response.body) throw await errorFrom(response)
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffer = ""
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      const lines = buffer.split(NEWLINE)
+      buffer = lines.pop() ?? ""
+      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as ChatEvent)
+    }
+  },
   context: () => request<ContextOverview>("/api/context"),
   contextFile: (path: string) => request<{ path: string; content: string }>(`/api/context/file?path=${encodeURIComponent(path)}`),
   saveContextFile: (path: string, content: string) =>

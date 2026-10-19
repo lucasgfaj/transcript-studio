@@ -29,9 +29,14 @@ class OllamaChat:
 
     def stream(self, model: str, system: str, prompt: str, should_stop: ShouldStop | None = None,
                max_tokens: int | None = None) -> Iterator[str]:
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
+        yield from self.stream_chat(model, messages, should_stop, max_tokens)
+
+    def stream_chat(self, model: str, messages: list[dict[str, str]], should_stop: ShouldStop | None = None,
+                    max_tokens: int | None = None) -> Iterator[str]:
         payload: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": True,
             "keep_alive": self._keep_alive,
             # repeat_penalty: small quantized models can otherwise loop on the same sentence until num_predict.

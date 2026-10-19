@@ -8,17 +8,18 @@ from fastapi import Depends, Request
 from sqlmodel import Session
 
 from transcript_studio.core.config import Settings
-from transcript_studio.core.container import Container
+from transcript_studio.core.container import Container, ContainerGpuGate
 from transcript_studio.infrastructure.audio_storage import FileAudioStorage
 from transcript_studio.infrastructure.ollama_client import OllamaClient
 from transcript_studio.infrastructure.waveform import CachedWaveform
 from transcript_studio.repositories.sql import (
-    SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository, SqlSettingRepository,
+    SqlChatRepository, SqlJobRepository, SqlMeetingRepository, SqlMinutesRepository, SqlSegmentRepository, SqlSettingRepository,
 )
-from transcript_studio.infrastructure.context_files import ContextFilesService
+from transcript_studio.infrastructure.context_files import ContextFilesService, MarkdownContextSource
 from transcript_studio.services.llm_models import LlmModelService
 from transcript_studio.services.preferences import PreferencesService
 from transcript_studio.infrastructure.docx_renderer import DocxRenderer
+from transcript_studio.services.chat import ChatService
 from transcript_studio.services.documents import MinutesService, TranscriptService
 from transcript_studio.services.export import ExportService
 from transcript_studio.services.jobs import JobService
@@ -108,3 +109,16 @@ def get_context_files(settings: SettingsDep) -> ContextFilesService:
 
 LlmModelsDep = Annotated[LlmModelService, Depends(get_llm_models)]
 ContextFilesDep = Annotated[ContextFilesService, Depends(get_context_files)]
+
+
+def get_chat_service(session: SessionDep, settings: SettingsDep, container: ContainerDep, meetings: MeetingServiceDep,
+                     transcripts: TranscriptServiceDep, minutes: MinutesServiceDep,
+                     preferences: PreferencesDep) -> ChatService:
+    return ChatService(
+        meetings, transcripts, minutes, SqlChatRepository(session), container.chat,
+        MarkdownContextSource(settings.context_dir, lambda: preferences.get().context_max_chars),
+        ContainerGpuGate(container), lambda: preferences.get().default_llm,
+    )
+
+
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]

@@ -5,7 +5,7 @@ from sqlalchemy import String, cast
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, col, delete, or_, select
 
-from transcript_studio.models import AppSetting, Job, JobKind, JobStatus, Meeting, MeetingStatus, Minutes, Segment
+from transcript_studio.models import AppSetting, ChatMessage, Job, JobKind, JobStatus, Meeting, MeetingStatus, Minutes, Segment
 
 
 class SqlMeetingRepository:
@@ -141,4 +141,23 @@ class SqlSettingRepository:
         row = self._session.get(AppSetting, key) or AppSetting(key=key, value=value)
         row.value = value
         self._session.add(row)
+        self._session.commit()
+
+
+class SqlChatRepository:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def list_for(self, meeting_id: str) -> list[ChatMessage]:
+        statement = select(ChatMessage).where(ChatMessage.meeting_id == meeting_id).order_by(col(ChatMessage.id))
+        return list(self._session.exec(statement).all())
+
+    def add(self, message: ChatMessage) -> ChatMessage:
+        self._session.add(message)
+        self._session.commit()
+        self._session.refresh(message)
+        return message
+
+    def clear(self, meeting_id: str) -> None:
+        self._session.exec(delete(ChatMessage).where(col(ChatMessage.meeting_id) == meeting_id))
         self._session.commit()

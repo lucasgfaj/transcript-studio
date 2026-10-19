@@ -49,6 +49,8 @@ export type AgentChatProps = {
   error?: { message: string; title?: string };
   emptyStatePosition?: "default" | "center";
   placeholder?: string;
+  /** Custom rendering of assistant text (e.g. Markdown with clickable timestamps). */
+  renderText?: (text: string) => ReactNode;
   attachments?: {
     onAttach?: () => void;
     images?: AttachedImage[];
@@ -138,11 +140,16 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
-function AssistantText({ text }: { text: string }) {
+function AssistantText({ text, render }: { text: string; render?: (text: string) => ReactNode }) {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[90%] text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
-        {text}
+      <div
+        className={cn(
+          "max-w-[90%] text-sm leading-relaxed text-neutral-700 dark:text-neutral-300 break-words",
+          !render && "whitespace-pre-wrap",
+        )}
+      >
+        {render ? render(text) : text}
       </div>
     </div>
   );
@@ -169,7 +176,23 @@ function ErrorBubble({
   );
 }
 
-function MessageList({ messages }: { messages: AgentMessage[] }) {
+function MessageList({
+  messages,
+  renderText,
+}: {
+  messages: AgentMessage[];
+  renderText?: (text: string) => ReactNode;
+}) {
+  // Follow the newest text while an answer streams in.
+  const endRef = useRef<HTMLDivElement>(null);
+  const lastLength = messages.reduce(
+    (total, m) => total + m.parts.reduce((sum, p) => sum + (p.type === "text" ? p.text.length : 1), 0),
+    0,
+  );
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length, lastLength]);
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
       <div className="mx-auto max-w-[640px] flex flex-col gap-4">
@@ -188,10 +211,11 @@ function MessageList({ messages }: { messages: AgentMessage[] }) {
               if (m.role === "user") {
                 return <UserBubble key={i} text={part.text} />;
               }
-              return <AssistantText key={i} text={part.text} />;
+              return <AssistantText key={i} text={part.text} render={renderText} />;
             })}
           </div>
         ))}
+        <div ref={endRef} />
       </div>
     </div>
   );
@@ -438,6 +462,7 @@ export const AgentChat = memo(function AgentChat({
   error,
   emptyStatePosition = "default",
   placeholder,
+  renderText,
   attachments,
   className,
 }: AgentChatProps) {
@@ -484,7 +509,7 @@ export const AgentChat = memo(function AgentChat({
           <div className="w-full max-w-[640px]">{inputBarNode}</div>
         </div>
       ) : (
-        <MessageList messages={messagesWithError} />
+        <MessageList messages={messagesWithError} renderText={renderText} />
       )}
       {!isCenteredEmpty && inputBarNode}
     </div>

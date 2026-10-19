@@ -1,7 +1,9 @@
 """Long-lived objects (GPU worker, Whisper model, event bus) built once per app; tests inject fakes."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 
 from sqlalchemy.engine import Engine
 from sqlmodel import Session
@@ -32,6 +34,29 @@ class Container:
     worker: GpuWorker
     transcriber: Transcriber
     gpu: GpuReleaser
+    chat: ChatModel
+    live_sessions: int = field(default=0)
+
+
+class ContainerGpuGate:
+    """GpuGate for the chat: waits for the running GPU job, then frees Whisper so the LLM has the VRAM."""
+
+    def __init__(self, container: Container) -> None:
+        self._container = container
+
+    @property
+    def busy(self) -> bool:
+        return self._container.worker.current is not None
+
+    @property
+    def recording(self) -> bool:
+        return self._container.live_sessions > 0
+
+    @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        with self._container.worker.exclusive():
+            self._container.transcriber.unload()
+            yield
 
 
 def build_container(settings: Settings, engine: Engine, transcriber: Transcriber | None = None,
@@ -51,9 +76,10 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
 
     transcription = TranscriptionJobHandler(uow, FileAudioStorage(settings.meetings_dir), transcriber,
                                             gpu, events)
+    chat = chat or OllamaChat(settings.ollama_url, settings.llm_context_tokens)
     minutes = MinutesJobHandler(
         uow,
-        MinutesWriter(chat or OllamaChat(settings.ollama_url, settings.llm_context_tokens), settings.minutes_chunk_chars),
+        MinutesWriter(chat, settings.minutes_chunk_chars),
         MarkdownContextSource(settings.context_dir, lambda: preferences().context_max_chars),
         transcriber,
         events,
@@ -65,7 +91,7 @@ def build_container(settings: Settings, engine: Engine, transcriber: Transcriber
             return job.kind if job else None
 
     worker = GpuWorker({JobKind.transcribe: transcription, JobKind.minutes: minutes}, kind_of)
-    return Container(engine, events, worker, transcriber, gpu)
+    return Container(engine, events, worker, transcriber, gpu, chat)
 
 
 def start(container: Container, settings: Settings) -> None:
