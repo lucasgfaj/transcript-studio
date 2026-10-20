@@ -2,7 +2,41 @@
 
 App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
 
-O plano completo está em [`docs/PLANO.md`](docs/PLANO.md). Fases prontas: **0 (estrutura)**, **1 (banco, CRUD, áudio e importação)**, **2 (transcrição na GPU)**, **3 (ata com o Ollama)**, **4 (acabamento da interface)**, **5 (gravação ao vivo)**, **6 (modelos e contexto)** e **7 (chat com a reunião)**.
+Todas as fases do [plano](docs/PLANO.md) estão prontas (0 a 8).
+
+## Como usar
+
+**Pelo Windows:** dê dois cliques em `Transcript Studio.bat` (dá para copiar para a Área de Trabalho). O navegador abre sozinho em http://localhost:8000. Para parar, feche a janela.
+
+**Pelo terminal do WSL:**
+
+```bash
+cd ~/transcript-studio
+./dev.sh start      # compila a interface e sobe tudo em http://localhost:8000
+```
+
+Antes, abra o **Ollama** no Windows (ele gera as atas e responde o chat). A transcrição não depende dele.
+
+Outros comandos:
+
+| Comando | Para quê |
+| --- | --- |
+| `./dev.sh` | Desenvolvimento: API com recarga em :8000 e interface com hot reload em http://localhost:5173 |
+| `./dev.sh test` | Testes do backend, checagem de tipos e build da interface |
+| `./dev.sh build` | Só compila a interface |
+| `cd backend && uv run python -m transcript_studio.services.importer ~/transcript-mk` | Importa reuniões e contexto do projeto antigo (só copia; rodar de novo não duplica) |
+
+Na primeira vez, o `dev.sh` instala as dependências sozinho. Pré-requisitos no WSL: [uv](https://docs.astral.sh/uv/) e Node (via nvm). Configurações opcionais estão em `backend/.env.example`.
+
+### Problemas comuns
+
+| Sintoma | O que fazer |
+| --- | --- |
+| "Ollama offline" na barra lateral | Abrir o Ollama no Windows. O WSL precisa da rede espelhada: `networkingMode=mirrored` em `C:\Users\<você>\.wslconfig`, seguido de `wsl --shutdown`. |
+| Ao vivo grava, mas não aparece texto | Usar **Encontrar meu microfone**. No Windows: Privacidade → Microfone → permitir aplicativos da área de trabalho. |
+| Ata ou chat muito lentos | Em **Modelos**, usar um modelo marcado "Cabe inteiro na GPU" (qwen3.5:4b). Com o notebook na tomada, a GPU fica mais rápida. |
+| Primeira transcrição demora | O Whisper carrega quando o servidor sobe (~10 s); modelos novos do Whisper baixam no primeiro uso. |
+| Script no Windows demora 21 s para conectar | Usar `127.0.0.1` em vez de `localhost` (o Windows tenta IPv6 primeiro). Navegadores não têm esse problema. |
 
 ## Chat com a reunião (fase 7)
 
@@ -78,37 +112,6 @@ Como fica rápido:
 - **Whisper pré-carregado** quando o servidor sobe (`STUDIO_WHISPER_PRELOAD=true`): a primeira tarefa cai de ~35 s para ~3 s.
 - **Modo em lote** do faster-whisper (`STUDIO_WHISPER_BATCH_SIZE=16`; 24 não ganhou nada).
 - **Retomada:** tarefas interrompidas por um reinício voltam para a fila sozinhas.
-
-## Como rodar
-
-Pré-requisitos, todos dentro do WSL: [uv](https://docs.astral.sh/uv/), Node (via nvm) e o Ollama aberto no Windows (com a rede espelhada do WSL ativa).
-
-```bash
-cd ~/transcript-studio
-(cd backend && uv sync)          # primeira vez
-(cd frontend && npm install)     # primeira vez
-./dev.sh                         # API em :8000 + interface em http://localhost:5173
-```
-
-Para rodar tudo em um processo só, com o frontend já compilado:
-
-```bash
-./dev.sh build
-cd backend && uv run transcript-studio   # http://localhost:8000
-```
-
-Para importar as reuniões do projeto antigo (só copia; os originais ficam onde estão, e rodar de novo não duplica):
-
-```bash
-cd backend && uv run python -m transcript_studio.services.importer ~/transcript-mk
-```
-
-Testes:
-
-```bash
-cd backend && uv run pytest
-cd frontend && npm run build     # inclui a checagem de tipos (tsc)
-```
 
 ## Arquitetura (MVC + SOLID)
 

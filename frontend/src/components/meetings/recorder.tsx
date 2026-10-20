@@ -121,7 +121,7 @@ export function Recorder({ onRecorded, disabled }: { onRecorded: (file: File | n
       <div className="flex h-12 items-center gap-[3px]" aria-hidden>
         {Array.from({ length: bars }, (_, i) => {
           const wave = Math.sin((i / bars) * Math.PI)
-          const height = state === "recording" ? 6 + level * 44 * (0.4 + 0.6 * wave) * (0.7 + 0.3 * Math.random()) : 6
+          const height = state === "recording" ? 6 + level * 44 * (0.4 + 0.6 * wave) * (0.7 + 0.3 * Math.abs(Math.sin(i * 1.7 + level * 9))) : 6
           return (
             <span
               key={i}

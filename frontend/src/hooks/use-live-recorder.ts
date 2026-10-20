@@ -35,8 +35,11 @@ export function useLiveRecorder(sink: RefObject<((pcm: ArrayBuffer) => void) | n
   const [result, setResult] = useState<"saved" | "discarded" | null>(null)
   const socket = useRef<WebSocket | null>(null)
   const timer = useRef(0)
+  // Read by the audio callback and the timer, which outlive any single render.
   const stateRef = useRef<LiveState>("idle")
-  stateRef.current = state
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   const detach = useCallback(() => {
     sink.current = null

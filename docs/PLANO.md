@@ -152,7 +152,7 @@ Em ordem de impacto:
 | 5. Gravação e ao vivo ✅ | MediaRecorder, WebSocket com corte nas pausas, fila de GPU pausada | Feito: texto ~1,4 s após cada pausa, áudio salvo durante a gravação |
 | 6. Modelos e contexto ✅ | Tela de modelos (baixar, apagar, padrão, Whisper), editor de contexto com orçamento | Feito: tudo pela interface, preferências salvas no banco |
 | 7. Chat ✅ | `AgentChat` ligado ao Ollama com busca de trechos e horários clicáveis | Feito: 1º token em ~1 s, horários sempre de segmentos reais |
-| 8. Acabamento | Testes, README, um comando para subir tudo | `pytest` e o build do front passam |
+| 8. Acabamento ✅ | Testes, README, um comando para subir tudo | Feito: `./dev.sh start` ou dois cliques no `.bat`; 48 testes estáveis |
 
 ## 6. Decisões em aberto
 
