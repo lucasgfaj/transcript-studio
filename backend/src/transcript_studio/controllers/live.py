@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -32,6 +33,7 @@ from transcript_studio.services.live import LiveSession, save_meeting, start_mee
 from transcript_studio.services.live_segmenter import Utterance
 
 router = APIRouter(tags=["live"])
+_SAVER = ThreadPoolExecutor(max_workers=2, thread_name_prefix="live-save")
 log = logging.getLogger(__name__)
 
 
@@ -60,7 +62,7 @@ async def live(websocket: WebSocket) -> None:
     container.worker.hold()  # no new GPU job starts while recording
     container.live_sessions += 1
     utterances: asyncio.Queue[Utterance | None] = asyncio.Queue()
-    finished = False
+    saving = False
 
     async def transcribe_loop() -> None:
         while (utterance := await utterances.get()) is not None:
@@ -98,18 +100,23 @@ async def live(websocket: WebSocket) -> None:
         utterances.put_nowait(None)
         await worker
 
-        saved = await asyncio.to_thread(_save, settings, engine, session, recording)
-        finished = True
+        # Submitted synchronously and awaited through shield(): if this task is cancelled now (server
+        # shutting down, client gone) the save still runs. asyncio.to_thread would be cancelled before
+        # starting, and a second save from the finally block would race this one on the same files.
+        saving = True
+        saved = await asyncio.shield(asyncio.wrap_future(_SAVER.submit(_save, settings, engine, session, recording)))
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "saved", "meeting_id": meeting_id, "segments": len(session.segments)}
                                       if saved else {"type": "discarded"})
             await websocket.close()
     finally:
-        if not finished:
+        if not saving:
             # Cancelled (server shutting down) or crashed mid-recording: keep the audio and the text so far.
             session.finish()
-            with contextlib.suppress(Exception):
+            try:
                 _save(settings, engine, session, recording)
+            except Exception:
+                log.exception("Could not save the live recording of meeting %s", meeting_id)
         container.live_sessions -= 1
         container.worker.release()
 

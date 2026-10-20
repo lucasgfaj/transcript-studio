@@ -34,9 +34,11 @@ def wait_for(client: TestClient, job_id: str, status: str, timeout: float = 5) -
 def test_transcription_saves_timed_segments_and_frees_gpu_first(client: TestClient, transcriber: FakeTranscriber,
                                                                 gpu: FakeGpu) -> None:
     meeting = upload(client)
+    transcriber.gate = threading.Event()  # hold the fake so the in-progress status can be observed
     response = client.post(f"/api/meetings/{meeting['id']}/transcribe", json={"mode": "detailed", "language": "pt"})
     assert response.status_code == 202
     assert client.get(f"/api/meetings/{meeting['id']}").json()["status"] == "transcribing"
+    transcriber.gate.set()
 
     job = wait_for(client, response.json()["id"], "done")
     assert job["progress"] == 1.0
