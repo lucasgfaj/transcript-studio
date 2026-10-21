@@ -1,17 +1,70 @@
-# Local data: meeting audio, transcripts and the SQLite database
+# ---------------------------------------------------------------
+# Dados locais: NUNCA vão para o Git
+# (áudios das reuniões, transcrições, atas, banco SQLite e
+#  arquivos de contexto com nomes de pessoas e empresas)
+# ---------------------------------------------------------------
 data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
+# Áudio e vídeo soltos (ex.: arquivos de teste copiados para o projeto)
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.flac
+*.webm
+*.mp4
+*.peaks.json
+
+# Exportações de atas e transcrições
+*.docx
+*.srt
+exports/
+
+# ---------------------------------------------------------------
+# Segredos e configurações locais
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ---------------------------------------------------------------
 # Python
-backend/.venv/
+# ---------------------------------------------------------------
+.venv/
+venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-backend/.env
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-# Node
-frontend/node_modules/
+# ---------------------------------------------------------------
+# Node / frontend
+# ---------------------------------------------------------------
+node_modules/
 frontend/dist/
 *.tsbuildinfo
 
+# ---------------------------------------------------------------
+# Logs, editores e sistema
+# ---------------------------------------------------------------
+logs/
+*.log
+.vscode/
+.idea/
+.claude/
 .DS_Store
 Thumbs.db
+desktop.ini

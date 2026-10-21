@@ -1,176 +1,326 @@
 # Transcript Studio
 
-App web local para importar, gravar, transcrever e gerar atas de reuniões. O backend é FastAPI e o frontend é React. Tudo roda no próprio computador, com Ollama para o modelo de linguagem e faster-whisper para a transcrição.
+App web **100% local** para importar ou gravar reuniões, transcrever o áudio com horários clicáveis, gerar a **ata com IA** e conversar com a reunião em um chat. Nada sai do computador: a transcrição usa o [faster-whisper](https://github.com/SYSTRAN/faster-whisper) na GPU e a ata e o chat usam um modelo local do [Ollama](https://ollama.com).
 
-Todas as fases do [plano](docs/PLANO.md) estão prontas (0 a 8).
+| | |
+| --- | --- |
+| **Backend** | Python 3.12, FastAPI, SQLModel (SQLite), faster-whisper |
+| **Frontend** | React 19, Vite, Tailwind v4, shadcn/ui, TanStack Query, wavesurfer.js |
+| **IA local** | Ollama (padrão `qwen3.5:4b`) e Whisper `large-v3-turbo` |
+| **Ambiente** | Windows + WSL (Ubuntu), GPU NVIDIA (testado em RTX 4050 6 GB) |
 
-## Como usar
+---
 
-**Pelo Windows:** dê dois cliques em `Transcript Studio.bat` (dá para copiar para a Área de Trabalho). O navegador abre sozinho em http://localhost:8000. Para parar, feche a janela.
+## Sumário
 
-**Pelo terminal do WSL:**
+1. [O que o app faz](#o-que-o-app-faz)
+2. [Pré-requisitos](#pré-requisitos)
+3. [Instalação (primeira vez)](#instalação-primeira-vez)
+4. [Como usar no dia a dia](#como-usar-no-dia-a-dia)
+5. [Passo a passo de uma reunião](#passo-a-passo-de-uma-reunião)
+6. [Configuração](#configuração)
+7. [Dados e privacidade](#dados-e-privacidade)
+8. [Arquitetura](#arquitetura)
+9. [API](#api)
+10. [Desenvolvimento e testes](#desenvolvimento-e-testes)
+11. [Problemas comuns](#problemas-comuns)
+
+---
+
+## O que o app faz
+
+| Tela | Para quê |
+| --- | --- |
+| **Biblioteca** | Lista todas as reuniões, com busca por título, participantes ou por algo que foi dito. |
+| **Nova reunião** | Envia um arquivo de áudio (wav, mp3, m4a…) ou grava pelo microfone. |
+| **Ao vivo** | Grava pelo microfone e mostra o texto a cada pausa na fala, em tempo real. |
+| **Reunião** | Player com forma de onda, transcrição clicável, aba **Ata** e aba **Chat**. |
+| **Modelos** | Escolhe, baixa e apaga modelos do Ollama e troca o tamanho do Whisper. |
+| **Contexto** | Edita arquivos Markdown (glossário, pessoas, empresas) que ajudam a IA a acertar nomes. |
+
+Recursos principais:
+
+- **Transcrição na GPU** com horário em cada trecho. Clicar no horário pula o áudio para ali.
+  Modo **Rápido** (lote, ~75x o tempo real) ou **Detalhado** (frase a frase).
+- **Ata gerada por IA** em streaming. Reuniões longas são lidas em partes e depois consolidadas.
+  Cada geração ou edição vira uma **versão**, que pode ser restaurada.
+- **Exportação** da ata em `.docx` ou `.md`, da transcrição em `.txt` e de legendas `.srt`.
+- **Chat com a reunião**: perguntas como "liste as tarefas" ou "o que foi dito sobre o orçamento?".
+  Cada horário citado na resposta, como **[33:35]**, é um botão que toca o áudio daquele ponto.
+- **Fila única de GPU**: um trabalho por vez (transcrição, ata ou chat), com o progresso na barra lateral.
+- **Busca rápida** com `Ctrl+K`, tema claro/escuro e layout que funciona no celular.
+
+---
+
+## Pré-requisitos
+
+No **Windows**:
+
+1. **WSL com Ubuntu** (`wsl --install -d Ubuntu`).
+2. **Driver NVIDIA** atualizado (a GPU fica disponível dentro do WSL automaticamente).
+3. **[Ollama para Windows](https://ollama.com/download)** instalado e aberto.
+4. **Rede espelhada no WSL**, para o WSL enxergar o Ollama em `localhost`. Crie ou edite
+   `C:\Users\<você>\.wslconfig`:
+
+   ```ini
+   [wsl2]
+   networkingMode=mirrored
+   ```
+
+   Depois rode `wsl --shutdown` no PowerShell e abra o WSL de novo.
+
+No **WSL (Ubuntu)**:
 
 ```bash
-cd ~/transcript-studio
-./dev.sh start      # compila a interface e sobe tudo em http://localhost:8000
+# uv (gerenciador de Python)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Node.js via nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install --lts
+
+# ffmpeg não é necessário: o áudio é lido com PyAV
 ```
 
-Antes, abra o **Ollama** no Windows (ele gera as atas e responde o chat). A transcrição não depende dele.
+---
 
-Outros comandos:
+## Instalação (primeira vez)
+
+```bash
+cd ~
+git clone https://github.com/lucasgfaj/transcript-studio.git
+cd transcript-studio
+chmod +x dev.sh
+./dev.sh start
+```
+
+Na primeira execução o `dev.sh` instala sozinho as dependências do backend (`uv sync`) e do frontend (`npm install`), compila a interface e abre o navegador em **http://localhost:8000**.
+
+Baixe pelo menos um modelo de linguagem no Ollama (ou pela tela **Modelos** do app):
+
+```bash
+ollama pull qwen3.5:4b
+```
+
+O modelo do Whisper é baixado automaticamente no primeiro uso.
+
+> **Atalho no Windows:** o arquivo `Transcript Studio.bat` sobe o app dentro do WSL e abre o navegador.
+> Copie-o para a Área de Trabalho e dê dois cliques. Ele assume que o projeto está em `~/transcript-studio`
+> na distribuição `Ubuntu`; ajuste a linha do `wsl.exe` se for diferente.
+
+---
+
+## Como usar no dia a dia
+
+1. Abra o **Ollama** no Windows (necessário para a ata e o chat; a transcrição funciona sem ele).
+2. Dê dois cliques em **`Transcript Studio.bat`** ou rode no WSL:
+
+   ```bash
+   cd ~/transcript-studio
+   ./dev.sh start
+   ```
+
+3. Use o app em **http://localhost:8000**.
+4. Para parar: feche a janela do `.bat` ou aperte `Ctrl+C` no terminal.
+
+Comandos do `dev.sh`:
 
 | Comando | Para quê |
 | --- | --- |
+| `./dev.sh start` | Uso normal: compila a interface e serve tudo em http://localhost:8000 |
 | `./dev.sh` | Desenvolvimento: API com recarga em :8000 e interface com hot reload em http://localhost:5173 |
 | `./dev.sh test` | Testes do backend, checagem de tipos e build da interface |
-| `./dev.sh build` | Só compila a interface |
-| `cd backend && uv run python -m transcript_studio.services.importer ~/transcript-mk` | Importa reuniões e contexto do projeto antigo (só copia; rodar de novo não duplica) |
+| `./dev.sh build` | Só compila a interface (`frontend/dist`) |
 
-Na primeira vez, o `dev.sh` instala as dependências sozinho. Pré-requisitos no WSL: [uv](https://docs.astral.sh/uv/) e Node (via nvm). Configurações opcionais estão em `backend/.env.example`.
+---
 
-### Problemas comuns
+## Passo a passo de uma reunião
 
-| Sintoma | O que fazer |
-| --- | --- |
-| "Ollama offline" na barra lateral | Abrir o Ollama no Windows. O WSL precisa da rede espelhada: `networkingMode=mirrored` em `C:\Users\<você>\.wslconfig`, seguido de `wsl --shutdown`. |
-| Ao vivo grava, mas não aparece texto | Usar **Encontrar meu microfone**. No Windows: Privacidade → Microfone → permitir aplicativos da área de trabalho. |
-| Ata ou chat muito lentos | Em **Modelos**, usar um modelo marcado "Cabe inteiro na GPU" (qwen3.5:4b). Com o notebook na tomada, a GPU fica mais rápida. |
-| Primeira transcrição demora | O Whisper carrega quando o servidor sobe (~10 s); modelos novos do Whisper baixam no primeiro uso. |
-| Script no Windows demora 21 s para conectar | Usar `127.0.0.1` em vez de `localhost` (o Windows tenta IPv6 primeiro). Navegadores não têm esse problema. |
+1. **Criar a reunião**
+   - Em **Nova reunião**, arraste o arquivo de áudio ou grave pelo microfone; ou
+   - Em **Ao vivo**, clique em gravar. Use **Encontrar meu microfone** se o medidor não se mexer.
+     O áudio é salvo no servidor enquanto você fala, então fechar a aba não perde nada.
+2. **Transcrever**: na página da reunião, escolha o modo (**Rápido** ou **Detalhado**) e clique em
+   **Transcrever**. O texto aparece enquanto o Whisper trabalha.
+3. **Revisar**: clique nos horários para ouvir o trecho. Atalhos do player: `Espaço` toca/pausa,
+   `←`/`→` pulam 5 s, `Shift+←`/`→` pulam 30 s. A busca na transcrição ignora acentos.
+4. **Gerar a ata**: na aba **Ata**, escolha o modelo e clique em **Gerar com IA**. Edite à vontade;
+   cada edição vira uma versão nova.
+5. **Perguntar**: na aba **Chat**, faça perguntas sobre a reunião. O botão **Parar** interrompe a resposta.
+6. **Exportar**: botão **Exportar** → `.docx`, `.md`, `.txt` ou `.srt`.
 
-## Chat com a reunião (fase 7)
+### Contexto (opcional, mas recomendado)
 
-Na aba **Chat** da reunião, pergunte qualquer coisa ("o que foi dito sobre a comissão?", "liste as tarefas"). A resposta vem do modelo local, em streaming, com base na ata e nos trechos da transcrição. Cada horário citado, como **[33:35]**, é um botão que toca o áudio a partir dali. A conversa fica salva por reunião e pode ser apagada.
+Na tela **Contexto**, crie arquivos Markdown com glossário, nomes de pessoas, cargos e empresas. Esse texto entra no prompt da ata e do chat **só para acertar a grafia dos nomes**, sem ser citado. A tela mostra quantos caracteres vão para o prompt e quais arquivos ficaram de fora por falta de espaço. Arquivos `README.md` dentro do contexto não entram no prompt.
 
-Como funciona:
-- **Busca de trechos** (`services/retrieval.py`): uma reunião de 70 min tem ~60 mil caracteres e não cabe na janela de 8 mil tokens do modelo. A transcrição vira passagens de ~1.000 caracteres, pontuadas pelas palavras raras da pergunta (sem acento, sem palavras vazias). Até 9 mil caracteres das melhores vão em ordem cronológica, com o horário de cada frase. Perguntas sem tema ("resuma") recebem trechos espalhados do começo ao fim.
-- **Horários confiáveis:** modelos pequenos inventam segundos dentro de um segmento de 30 s. Antes de salvar, cada citação é ajustada para o início do segmento que a contém (em teste real, 17 de 19 horários brutos não existiam; depois do ajuste, 0).
-- **GPU:** a resposta espera a tarefa em andamento terminar (e avisa), tira o Whisper da GPU e bloqueia novas tarefas até acabar. Durante uma gravação ao vivo o chat não roda.
-- **Parar:** o botão Parar corta o stream do Ollama na hora, e a resposta parcial fica salva como "interrompida".
+### Importar reuniões de um projeto antigo
 
-Medido na reunião de 70 min com qwen3.5:4b: **primeiro token em ~1 s**, resposta completa em 6 a 20 s.
+Se você tem as pastas do projeto anterior (`transcript-mk`), dá para copiar reuniões e contexto para o app. Os originais não são alterados e rodar de novo não duplica:
 
-## Modelos e contexto (fase 6)
-
-- **Modelos:** lista o que está instalado no Ollama e marca o que cabe inteiro na GPU de 6 GB e o que roda em parte na CPU (bem mais lento). Também mostra o que está carregado agora.
-  - Escolhe o modelo padrão da ata e apaga modelos (o padrão é protegido).
-  - Baixa modelos sugeridos, ou qualquer um da biblioteca do Ollama, com barra de progresso.
-  - Troca o tamanho do Whisper. A troca passa pela fila de GPU, então uma transcrição em andamento termina com o modelo com que começou.
-- **Contexto:** edita os arquivos Markdown de `data/context/` (glossário, pessoas, empresas), cria e apaga. Mostra quantos caracteres vão para o prompt, quais arquivos ficaram de fora por falta de espaço, e permite ajustar o limite (1.000 a 12.000).
-- As escolhas ficam no banco (tabela `appsetting`) e passam por cima dos valores de `core/config.py`.
-
-## Ao vivo (fase 5)
-
-Em **Ao vivo**, grave pelo microfone e veja o texto aparecer a cada pausa na fala. O áudio é gravado no servidor enquanto você fala, então fechar a aba ou cair a conexão não perde nada. Ao parar, a reunião é salva com áudio e transcrição com horários. Depois dá para usar "Transcrever de novo" no modo Detalhado e gerar a ata.
-
-Teste com 2 minutos de uma reunião real enviados em tempo real (RTX 4050): 27 trechos, **texto em mediana 1,4 s depois da pausa** (pior caso 8,3 s num trecho longo sem pausa).
-
-Como funciona:
-- O navegador captura com um **AudioWorklet**, converte para 16 kHz mono PCM16 e envia blocos de 250 ms por WebSocket (`/api/live`).
-- O servidor corta a fala em **pausas** de 0,6 s (`services/live_segmenter.py`). Mínimo de 2 s, e um corte forçado a cada 15 s no ponto mais silencioso. Silêncio não vai para o Whisper, o que evita frases inventadas.
-- Cada trecho vai para o Whisper com as últimas frases como contexto, para manter nomes e grafia.
-- Enquanto grava, a **fila de GPU pausa**: tarefas novas esperam, e o Ollama é descarregado.
-
-## Interface (fase 4)
-
-- **Busca rápida (Ctrl+K / ⌘K):** acha qualquer reunião pelo título, pelos participantes ou por algo que foi dito, e tem atalhos para nova reunião e troca de tema.
-- **Busca na transcrição:** ignora acentos ("comissao" encontra "comissão"), destaca as ocorrências e navega entre elas com Enter / Shift+Enter.
-- **Player:** Espaço toca/pausa, ←/→ pulam 5 s, Shift+←/→ pulam 30 s. O trecho que está tocando fica destacado, e "Seguir áudio" rola junto.
-- **Fila da GPU na barra lateral:** mostra o que está rodando, a etapa e o que vem a seguir. Avisa quando uma transcrição ou ata termina, mesmo que você esteja em outra página.
-- **Celular e tema claro/escuro** revisados, título da aba por página (⏳ enquanto processa) e páginas carregadas sob demanda.
-
-## Ata (fase 3)
-
-Na aba **Ata**, escolha o modelo e clique em **Gerar com IA**. Reuniões longas são lidas em partes (notas curtas por trecho) e depois a ata é escrita, com o texto aparecendo enquanto o modelo escreve. Cada geração ou edição vira uma versão nova: dá para ver as anteriores e restaurar. **Exportar** baixa a ata em `.docx` ou `.md`, a transcrição em `.txt` e legendas `.srt`.
-
-Comparação na reunião ADM (32 min, 20 mil caracteres de transcrição), na mesma RTX 4050:
-
-| Modelo | Tempo | Onde roda | Resultado |
-| --- | --- | --- | --- |
-| **qwen3.5:4b** (padrão) | 44 s | 100% GPU | Ata organizada, usa o contexto para acertar nomes, poucas tarefas e todas com responsável |
-| qwen3:8b | 312 s | 37% CPU | Mais exaustiva, mas lista fatos como "tarefas" |
-
-Detalhes que deixam isso rápido e confiável:
-- Antes de o Ollama carregar, o Whisper sai da GPU, porque os dois não cabem juntos em 6 GB.
-- Notas limitadas a 700 tokens por trecho. A consolidação roda no máximo 2 rodadas e só repete se as notas encolherem: um modelo prolixo deixava o laço sem fim.
-- `repeat_penalty` evita que modelos pequenos repitam a mesma frase.
-- O contexto de `data/context/` (glossário, entidades e grupos, importado do transcript-mk) entra no prompt só para acertar nomes, sem ser citado.
-
-## Transcrição (fase 2)
-
-Na página da reunião, escolha o modo e clique em **Transcrever**. O texto aparece enquanto o Whisper trabalha, cada trecho com o horário dele. Clicar no horário pula o áudio para ali, e o trecho que está tocando fica destacado.
-
-Medido no seu notebook (RTX 4050 6 GB, `large-v3-turbo` com `int8_float16`):
-
-| Modo | Como funciona | Reunião de 32 min | Reunião de 70 min |
-| --- | --- | --- | --- |
-| **Rápido** (padrão) | Lote de 16 janelas por vez; trechos de até ~30 s | 26 s (75x) | 82 s (51x, incluindo preparar o áudio) |
-| **Detalhado** | Sequencial, frase a frase (~3 s por trecho) | 59 s (32x) | ~2 min 10 s (estimado) |
-
-Como fica rápido:
-- **Fila única de GPU** (`services/gpu_worker.py`): um trabalho por vez, e antes de transcrever o Ollama é mandado descarregar os modelos (`keep_alive: 0`). Com os dois juntos na GPU de 6 GB, a transcrição ficava mais de 100x mais lenta.
-- **Whisper pré-carregado** quando o servidor sobe (`STUDIO_WHISPER_PRELOAD=true`): a primeira tarefa cai de ~35 s para ~3 s.
-- **Modo em lote** do faster-whisper (`STUDIO_WHISPER_BATCH_SIZE=16`; 24 não ganhou nada).
-- **Retomada:** tarefas interrompidas por um reinício voltam para a fila sozinhas.
-
-## Arquitetura (MVC + SOLID)
-
-```text
-frontend/ (View)              React 19 + Vite + Tailwind v4 + shadcn/ui
-  src/components/ui/          componentes shadcn e agent-chat.tsx (alias @/components/ui)
-  src/components/meetings/    player com waveform, gravador, painéis de transcrição, ata e chat
-  src/pages/                  Biblioteca, Nova reunião, Reunião
-  src/lib/api.ts              cliente tipado da API
-  src/hooks/                  TanStack Query (cache, invalidação)
-
-backend/src/transcript_studio/
-  controllers/   Controller: rotas FastAPI; só HTTP, sem regra de negócio
-  schemas/       contratos de entrada e saída da API
-  services/      regras de negócio (status, versões da ata, importação)
-  domain/        ports.py (interfaces/Protocols) e erros de domínio
-  models/        Model: tabelas SQLModel
-  repositories/  implementação SQL das interfaces
-  infrastructure/ arquivos de áudio, waveform (PyAV + numpy), cliente Ollama
-  core/          configuração, banco, dependencies.py (composition root)
+```bash
+cd ~/transcript-studio/backend
+uv run python -m transcript_studio.services.importer ~/transcript-mk
 ```
 
-| Princípio | Onde aparece |
+---
+
+## Configuração
+
+Tudo funciona sem configuração. Para mudar os padrões, copie o exemplo e edite:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+| Variável | Padrão | O que faz |
+| --- | --- | --- |
+| `STUDIO_OLLAMA_URL` | `http://localhost:11434` | Endereço do Ollama |
+| `STUDIO_DEFAULT_LLM` | `qwen3.5:4b` | Modelo padrão da ata e do chat |
+| `STUDIO_DEFAULT_WHISPER` | `large-v3-turbo` | Modelo do Whisper |
+| `STUDIO_GPU_MEMORY_GB` | `6` | Memória da GPU, usada para dizer quais modelos cabem inteiros nela |
+| `STUDIO_WHISPER_PRELOAD` | `true` | Carrega o Whisper quando o servidor sobe |
+| `STUDIO_WHISPER_BATCH_SIZE` | `16` | Tamanho do lote no modo Rápido |
+| `STUDIO_DATA_DIR` | `./data` | Onde ficam banco, áudios e contexto |
+
+As escolhas feitas nas telas **Modelos** e **Contexto** ficam salvas no banco (tabela `appsetting`) e têm prioridade sobre o `.env`.
+
+---
+
+## Dados e privacidade
+
+Todo o conteúdo das reuniões fica na pasta `data/`, **que não vai para o Git**:
+
+```text
+data/
+  studio.db                    SQLite: reuniões, segmentos, versões da ata, chat, tarefas
+  meetings/<id>/audio.<ext>    áudio original + cache da forma de onda
+  context/                     arquivos de contexto (nomes de pessoas e empresas)
+```
+
+O `.gitignore` também bloqueia `.env`, bancos (`*.db`, `*.sqlite`), áudios soltos (`*.wav`, `*.mp3`, `*.m4a`…), exportações (`*.docx`, `*.srt`), ambientes virtuais, `node_modules` e o build do frontend. **Faça backup da pasta `data/`** se quiser guardar as reuniões: ela não está no repositório.
+
+Antes de um commit, confira o que vai subir:
+
+```bash
+git status
+git ls-files | grep -E '^data/|\.env$|\.db$|\.wav$'   # não deve mostrar nada
+```
+
+---
+
+## Arquitetura
+
+```text
+Navegador (React)  ──HTTP / SSE / WebSocket──▶  FastAPI  ──▶  Fila de GPU (1 trabalho por vez)
+                                                  │             ├─ faster-whisper (fica carregado)
+                                                  │             └─ Ollama  http://localhost:11434
+                                                  ├─ SQLite  data/studio.db
+                                                  └─ data/meetings/<id>/  (áudio)
+```
+
+Whisper e Ollama não cabem juntos numa GPU de 6 GB, e disputá-la deixa tudo mais de 100x mais lento. Por isso a **fila de GPU** (`services/gpu_worker.py`) roda um trabalho por vez e descarrega o modelo que não está em uso. Durante uma gravação ao vivo a fila pausa.
+
+```text
+frontend/                         View: React 19 + Vite + Tailwind v4 + shadcn/ui
+  src/pages/                      Biblioteca, Nova reunião, Ao vivo, Reunião, Modelos, Contexto
+  src/components/meetings/        player, gravador, painéis de transcrição, ata e chat
+  src/components/ui/              componentes shadcn
+  src/hooks/                      TanStack Query, microfone, gravação ao vivo
+  src/lib/api.ts                  cliente tipado da API
+
+backend/src/transcript_studio/
+  main.py          cria o app, monta /api e serve o frontend compilado
+  controllers/     rotas FastAPI (só HTTP, sem regra de negócio)
+  schemas/         contratos de entrada e saída da API
+  services/        regras de negócio: transcrição, ata, chat, ao vivo, busca, importação
+  domain/          ports.py (interfaces/Protocols) e erros de domínio
+  models/          tabelas SQLModel
+  repositories/    implementação SQL das interfaces
+  infrastructure/  Whisper, Ollama, arquivos de áudio, waveform, .docx, contexto
+  core/            configuração, banco e dependencies.py (composition root)
+```
+
+O backend segue **MVC + SOLID**: os services recebem interfaces (`Protocol`) e só `core/dependencies.py` escolhe as classes concretas. Trocar o provedor (por exemplo, outro modelo de transcrição) é criar outra implementação do port, sem mexer nas regras de negócio. O plano completo do projeto está em [`docs/PLANO.md`](docs/PLANO.md).
+
+### Desempenho medido (RTX 4050 6 GB)
+
+| Tarefa | Resultado |
 | --- | --- |
-| **S** (responsabilidade única) | Repositório só faz SQL; `FileAudioStorage` só cuida de arquivos; `CachedWaveform` só gera picos; o controller só traduz HTTP |
-| **O** (aberto/fechado) | Um provedor novo (Whisper, Ollama, Groq) entra como outra implementação de um port, sem mexer nos services |
-| **L** (substituição) | Qualquer implementação que cumpra o Protocol funciona, inclusive fakes nos testes |
-| **I** (interfaces enxutas) | `MeetingRepository`, `SegmentRepository`, `MinutesRepository`, `AudioStorage`, `WaveformProvider` são separados |
-| **D** (inversão de dependência) | Services recebem Protocols; só `core/dependencies.py` escolhe as classes concretas |
+| Transcrição, modo Rápido, reunião de 32 min | 26 s |
+| Transcrição, modo Rápido, reunião de 70 min | 82 s |
+| Ata com `qwen3.5:4b`, reunião de 32 min | 44 s (100% na GPU) |
+| Ata com `qwen3:8b`, mesma reunião | 312 s (parte na CPU) |
+| Chat, primeiro token | ~1 s |
+| Ao vivo, texto depois da pausa | mediana 1,4 s |
 
-## Dados
-
-- `data/studio.db`: SQLite com reuniões, segmentos e versões da ata.
-- `data/meetings/<id>/audio.<ext>`: o áudio original, mais o cache da forma de onda.
-- `data/` fica fora do Git porque contém o conteúdo das reuniões.
+---
 
 ## API
+
+A documentação interativa fica em **http://localhost:8000/docs**.
 
 | Método | Rota |
 | --- | --- |
 | GET / POST | `/api/meetings` (lista com `?q=` e `?status=`; criar) |
 | POST | `/api/meetings/from-audio` (cria a reunião e envia o áudio em uma chamada) |
 | GET / PATCH / DELETE | `/api/meetings/{id}` |
-| PUT / GET / DELETE | `/api/meetings/{id}/audio` (o GET aceita Range, para avançar e voltar no player) |
+| PUT / GET / DELETE | `/api/meetings/{id}/audio` (GET aceita Range) |
 | GET | `/api/meetings/{id}/audio/peaks` |
 | GET / PUT | `/api/meetings/{id}/transcript` |
+| POST | `/api/meetings/{id}/transcribe` (`{"mode": "fast"\|"detailed", "language": "pt"}`) |
 | GET / PUT | `/api/meetings/{id}/minutes` (cada PUT vira uma nova versão) |
-| POST | `/api/meetings/{id}/transcribe` (`{"mode": "fast"\|"detailed", "language": "pt"}`; 409 se já houver uma tarefa) |
-| GET | `/api/meetings/{id}/job` (última tarefa da reunião) |
-| GET | `/api/jobs`, `/api/jobs/{id}`; POST `/api/jobs/{id}/cancel` |
-| GET | `/api/jobs/{id}/events` (SSE: snapshot, status, segments, done/error/cancelled) |
-| POST | `/api/meetings/{id}/minutes/generate` (`{"model": "qwen3.5:4b"}`; 409 sem transcrição) |
-| GET | `/api/meetings/{id}/minutes/{versão}` (uma versão antiga da ata) |
+| POST | `/api/meetings/{id}/minutes/generate` (`{"model": "qwen3.5:4b"}`) |
+| GET | `/api/meetings/{id}/minutes/{versão}` |
 | GET | `/api/meetings/{id}/export?format=md\|docx\|txt\|srt` |
-| WS | `/api/live` (gravação ao vivo; protocolo documentado em `controllers/live.py`) |
-| GET | `/api/models` (instalados, catálogo, Whisper) · POST `/api/models/pull` (progresso NDJSON) · DELETE `/api/models/{nome}` |
-| GET / PUT | `/api/preferences` (modelo padrão da ata, Whisper, limite do contexto) |
-| GET | `/api/context` · GET / PUT / DELETE `/api/context/file?path=` |
-| GET / POST / DELETE | `/api/meetings/{id}/chat` (histórico; pergunta com resposta em NDJSON: status, token, done, error; limpar) |
+| GET / POST / DELETE | `/api/meetings/{id}/chat` (resposta em NDJSON) |
+| GET | `/api/meetings/{id}/job`, `/api/jobs`, `/api/jobs/{id}`; POST `/api/jobs/{id}/cancel` |
+| GET | `/api/jobs/{id}/events` (SSE com o progresso) |
+| WS | `/api/live` (gravação ao vivo; protocolo em `controllers/live.py`) |
+| GET / POST / DELETE | `/api/models`, `/api/models/pull`, `/api/models/{nome}` |
+| GET / PUT | `/api/preferences` |
+| GET / PUT / DELETE | `/api/context`, `/api/context/file?path=` |
 | GET | `/api/health` (status do Ollama e da fila de GPU) |
 
-A documentação interativa fica em http://localhost:8000/docs.
+---
+
+## Desenvolvimento e testes
+
+```bash
+./dev.sh          # API em :8000 com recarga + interface em http://localhost:5173 com hot reload
+./dev.sh test     # pytest do backend + checagem de tipos e build do frontend
+```
+
+Só o backend:
+
+```bash
+cd backend
+uv sync
+uv run pytest -q
+uv run uvicorn transcript_studio.main:app --reload --port 8000
+```
+
+Só o frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev       # http://localhost:5173 (as chamadas /api vão para :8000)
+npm run lint
+```
+
+Os testes usam implementações falsas (fakes) do Whisper e do Ollama, então rodam sem GPU e sem o Ollama aberto.
+
+---
+
+## Problemas comuns
+
+| Sintoma | O que fazer |
+| --- | --- |
+| "Ollama offline" na barra lateral | Abrir o Ollama no Windows e conferir `networkingMode=mirrored` no `.wslconfig` (depois `wsl --shutdown`). |
+| Ao vivo grava, mas não aparece texto | Usar **Encontrar meu microfone**. No Windows: Configurações → Privacidade → Microfone → permitir aplicativos da área de trabalho. |
+| Ata ou chat muito lentos | Em **Modelos**, escolher um modelo marcado "Cabe inteiro na GPU" (ex.: `qwen3.5:4b`). Na tomada, a GPU do notebook fica mais rápida. |
+| Primeira transcrição demora | O Whisper carrega quando o servidor sobe (~10 s); modelos novos do Whisper baixam no primeiro uso. |
+| Script no Windows demora ~21 s para conectar | Usar `127.0.0.1` em vez de `localhost` (o Windows tenta IPv6 primeiro). |
+| `Transcript Studio.bat` não encontra o projeto | Conferir o nome da distribuição (`wsl -l -v`) e o caminho `~/transcript-studio` dentro do `.bat`. |
+| Pouca memória no WSL | O WSL enxerga metade da RAM. Aumentar em `.wslconfig` com `memory=12GB`. |
