@@ -106,21 +106,43 @@ _FACTS_ONLY = (
     "termos, nunca para inventar fatos, e não deve ser citado nem mencionado no texto."
 )
 _MINUTES_SYSTEM = (
-    "Você redige atas profissionais exclusivamente em português do Brasil. " + _FACTS_ONLY + " Retorne somente "
-    "Markdown, sem cercas de código. Inclua título H1, data, participantes, resumo, tópicos discutidos, decisões, "
-    "tarefas com checkboxes, pendências e próximos passos. Declare quando uma seção não tiver itens identificados."
+    "Você é o secretário de uma reunião e redige a ata em português do Brasil. A ata precisa deixar claro, para "
+    "quem não estava presente, POR QUE a reunião aconteceu, O QUE foi concluído e QUEM faz O QUÊ até QUANDO. "
+    + _FACTS_ONLY + " Quando um responsável ou prazo não foi dito, escreva \"não definido\"; quando uma seção não "
+    "tiver itens, escreva \"Nenhum item identificado.\". Frases curtas, sem repetir a mesma informação em seções "
+    "diferentes. Retorne somente Markdown, sem cercas de código, seguindo exatamente este modelo:\n\n"
+    "# <título da reunião>\n"
+    "**Data:** <data> · **Participantes:** <nomes>\n\n"
+    "## Objetivo\n"
+    "<1 a 2 frases com o propósito real: o problema a resolver ou a decisão a tomar, deduzido do que foi "
+    "discutido e não apenas do título>\n\n"
+    "## Resumo\n"
+    "<3 a 5 frases com o resultado da reunião em relação ao objetivo>\n\n"
+    "## Tópicos discutidos\n"
+    "### <assunto>\n"
+    "- <pontos principais, números e argumentos>\n\n"
+    "## Decisões\n"
+    "- <decisão> (motivo, se foi dito)\n\n"
+    "## Tarefas\n"
+    "- [ ] <tarefa> — **Responsável:** <nome> — **Prazo:** <data>\n\n"
+    "## Pendências e riscos\n"
+    "- <questão em aberto, dependência ou risco>\n\n"
+    "## Próximos passos\n"
+    "- <o que acontece depois desta reunião>"
 )
 _NOTES_SYSTEM = (
     "Você extrai notas de reuniões em português do Brasil. " + _FACTS_ONLY + " Responda só com tópicos curtos de "
-    "uma linha (fatos, números, decisões, tarefas com responsável e prazo, pendências), sem título, introdução "
-    "nem conclusão."
+    "uma linha, cada um começando com o rótulo do tipo: OBJETIVO (por que o assunto está sendo tratado), FATO "
+    "(informação ou número), DECISÃO, TAREFA (com responsável e prazo, ou \"não definido\") ou PENDÊNCIA. "
+    "Sem título, introdução nem conclusão."
 )
 _TASKS: dict[Stage, str] = {
     "final": "Elabore a ata desta reunião.",
-    "final_from_notes": "Elabore a ata desta reunião a partir das notas parciais abaixo, na ordem em que os assuntos aparecem.",
+    "final_from_notes": "Elabore a ata desta reunião a partir das notas parciais abaixo, na ordem em que os assuntos "
+                        "aparecem. Use as linhas OBJETIVO para escrever o objetivo da reunião.",
     "notes": "Extraia as notas deste trecho ({index}/{total}) em no máximo 15 tópicos.",
-    "condense": "Una e condense as notas abaixo em no máximo 25 tópicos, removendo repetições e mantendo números, "
-                "decisões, tarefas e responsáveis.",
+    "condense": "Una e condense as notas abaixo em no máximo 25 tópicos, removendo repetições, mantendo os rótulos "
+                "(OBJETIVO, FATO, DECISÃO, TAREFA, PENDÊNCIA), os números, os responsáveis e os prazos.",
 }
 
 
