@@ -1,5 +1,7 @@
 // Typed client for the FastAPI backend (the "model" side of the React view).
 
+import { readNdjson } from "@/lib/ndjson"
+
 export type MeetingStatus =
   | "draft"
   | "audio_ready"
@@ -108,7 +110,6 @@ export type JobEvent =
   | { type: "token"; text: string }
   | { type: "done" | "error" | "cancelled"; job: Job }
 
-const NEWLINE = String.fromCharCode(10)
 
 export const isActive = (job: Job | null | undefined) => job?.status === "queued" || job?.status === "running"
 
@@ -291,16 +292,7 @@ export const api = {
       signal,
     })
     if (!response.ok || !response.body) throw await errorFrom(response)
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-    let buffer = ""
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += value
-      const lines = buffer.split("\n")
-      buffer = lines.pop() ?? ""
-      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as PullEvent)
-    }
+    await readNdjson(response.body, onEvent)
   },
   preferences: () => request<Preferences>("/api/preferences"),
   updatePreferences: (changes: Partial<Preferences>) =>
@@ -317,16 +309,7 @@ export const api = {
       signal,
     })
     if (!response.ok || !response.body) throw await errorFrom(response)
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-    let buffer = ""
-    for (;;) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += value
-      const lines = buffer.split(NEWLINE)
-      buffer = lines.pop() ?? ""
-      for (const line of lines) if (line.trim()) onEvent(JSON.parse(line) as ChatEvent)
-    }
+    await readNdjson(response.body, onEvent)
   },
   context: () => request<ContextOverview>("/api/context"),
   contextFile: (path: string) => request<{ path: string; content: string }>(`/api/context/file?path=${encodeURIComponent(path)}`),

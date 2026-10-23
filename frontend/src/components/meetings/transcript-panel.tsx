@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useSaveTranscript, useTranscript } from "@/hooks/use-meetings"
 import type { LiveSegment } from "@/lib/api"
 import { formatClock } from "@/lib/format"
+import { fold, matchRanges } from "@/lib/search"
 import { cn } from "@/lib/utils"
 
 interface Line {
@@ -18,25 +19,18 @@ interface Line {
   text: string
 }
 
-/** Lower-case, accent-free, one output character per input character (so match offsets map back). */
-function fold(text: string): string {
-  return Array.from(text, (char) => char.normalize("NFD")[0].toLowerCase()).join("")
-}
-
 function highlight(text: string, query: string, current: boolean): ReactNode {
   if (!query) return text
-  const haystack = fold(text)
-  const needle = fold(query)
   const parts: ReactNode[] = []
   let from = 0
-  for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) {
-    parts.push(text.slice(from, at))
+  for (const [start, end] of matchRanges(text, query)) {
+    parts.push(text.slice(from, start))
     parts.push(
-      <mark key={at} className={cn("rounded px-0.5 text-inherit", current ? "bg-amber-400/70 dark:bg-amber-500/60" : "bg-amber-300/40 dark:bg-amber-400/25")}>
-        {text.slice(at, at + needle.length)}
+      <mark key={start} className={cn("rounded px-0.5 text-inherit", current ? "bg-amber-400/70 dark:bg-amber-500/60" : "bg-amber-300/40 dark:bg-amber-400/25")}>
+        {text.slice(start, end)}
       </mark>,
     )
-    from = at + needle.length
+    from = end
   }
   parts.push(text.slice(from))
   return parts

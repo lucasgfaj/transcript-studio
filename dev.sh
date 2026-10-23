@@ -2,7 +2,7 @@
 # ./dev.sh          development: API with reload on :8000 + Vite with hot reload on :5173 (open this one)
 # ./dev.sh start    everyday use: builds the interface and serves everything on http://localhost:8000
 # ./dev.sh build    only builds the interface (frontend/dist)
-# ./dev.sh test     backend tests + type check and build of the interface
+# ./dev.sh test     backend tests with coverage + lint, tests, type check and build of the interface
 set -euo pipefail
 cd "$(dirname "$0")"
 export PATH="$HOME/.local/bin:$PATH"
@@ -32,8 +32,8 @@ case "${1:-dev}" in
     ;;
   test)
     ensure_dependencies
-    (cd backend && uv run pytest -q)
-    (cd frontend && npm run build)
+    (cd backend && uv run pytest -q --cov)
+    (cd frontend && npm run lint && npm run coverage && npm run build)
     ;;
   start)
     ensure_dependencies
