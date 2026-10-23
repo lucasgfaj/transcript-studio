@@ -69,3 +69,6 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Grafo do graphify (gerado localmente, guarda caminhos da máquina)
+graphify-out/
