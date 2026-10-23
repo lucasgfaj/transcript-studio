@@ -64,7 +64,7 @@ logs/
 *.log
 .vscode/
 .idea/
-.claude/
+.claude/settings.local.json
 .DS_Store
 Thumbs.db
 desktop.ini
