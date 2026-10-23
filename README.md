@@ -241,7 +241,7 @@ backend/src/transcript_studio/
   core/            configuração, banco e dependencies.py (composition root)
 ```
 
-O backend segue **MVC + SOLID**: os services recebem interfaces (`Protocol`) e só `core/dependencies.py` escolhe as classes concretas. Trocar o provedor (por exemplo, outro modelo de transcrição) é criar outra implementação do port, sem mexer nas regras de negócio. O plano completo do projeto está em [`docs/PLANO.md`](docs/PLANO.md).
+O backend segue **MVC + SOLID**: os services recebem interfaces (`Protocol`) e só `core/dependencies.py` escolhe as classes concretas. Trocar o provedor (por exemplo, outro modelo de transcrição) é criar outra implementação do port, sem mexer nas regras de negócio. O plano completo do projeto está em [`docs/PLANO.md`](docs/PLANO.md); os requisitos em [`docs/PRD.md`](docs/PRD.md), o desenho do software em [`docs/SDD.md`](docs/SDD.md) e o plano de identificar quem fala em [`docs/PLANO-VOZ.md`](docs/PLANO-VOZ.md).
 
 ### Desempenho medido (RTX 4050 6 GB)
 
@@ -307,9 +307,10 @@ cd frontend
 npm install
 npm run dev       # http://localhost:5173 (as chamadas /api vão para :8000)
 npm run lint
+npm test          # testes (Vitest); npm run test:watch roda a cada alteração
 ```
 
-Os testes usam implementações falsas (fakes) do Whisper e do Ollama, então rodam sem GPU e sem o Ollama aberto.
+Os testes usam implementações falsas (fakes) do Whisper e do Ollama, então rodam sem GPU e sem o Ollama aberto. O projeto segue TDD: toda mudança começa por um teste. A estratégia completa, com a cobertura mínima de cada parte, está em [`docs/SDD.md`](docs/SDD.md#13-estratégia-de-testes-tdd).
 
 ---
 
