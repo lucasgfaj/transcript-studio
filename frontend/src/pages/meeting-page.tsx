@@ -69,7 +69,8 @@ function AudioCard({ meeting, playerRef, onTime }: {
   return (
     <Card>
       <CardContent>
-        <AudioPlayer ref={playerRef} src={api.audioUrl(meeting.id, version)} peaks={peaks} duration={meeting.audio_duration ?? 0} onTime={onTime} />
+        <AudioPlayer ref={playerRef} src={api.audioUrl(meeting.id, version)} peaks={peaks} duration={meeting.audio_duration ?? 0} onTime={onTime}
+          clipUrl={(clip) => api.audioDownloadUrl(meeting.id, clip)} />
       </CardContent>
     </Card>
   )
@@ -188,6 +189,12 @@ export function MeetingPage() {
               <DropdownMenuItem asChild disabled={!timed}>
                 <a href={api.exportUrl(meeting.id, "srt")} download title={timed ? undefined : "Transcreva com o Whisper para ter marcações de tempo"}>
                   <Captions /> Legendas (.srt)
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild disabled={!meeting.has_audio}>
+                <a href={api.audioDownloadUrl(meeting.id)} download>
+                  <FileAudio /> Áudio inteiro
                 </a>
               </DropdownMenuItem>
             </DropdownMenuContent>

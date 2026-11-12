@@ -12,13 +12,15 @@ from transcript_studio.services.meetings import MeetingService
 
 class JobService:
     def __init__(self, jobs: JobRepository, minutes: MinutesRepository, meetings: MeetingService,
-                 submit: Callable[[str], None], cancel: Callable[[str], None], default_llm: str) -> None:
+                 submit: Callable[[str], None], cancel: Callable[[str], None], default_llm: str,
+                 is_running: Callable[[str], bool] | None = None) -> None:
         self._jobs = jobs
         self._minutes = minutes
         self._meetings = meetings
         self._submit = submit
         self._cancel = cancel
         self._default_llm = default_llm
+        self._is_running = is_running
 
     def transcribe(self, meeting_id: str, language: str | None, mode: TranscriptionMode) -> Job:
         meeting = self._meetings.get(meeting_id)
@@ -51,8 +53,11 @@ class JobService:
         job = self.get(job_id)
         if job.status.active:
             self._cancel(job.id)
-            if job.status == JobStatus.queued:
-                # Not started yet: the worker will skip it, so settle it here.
+            orphan = (job.status == JobStatus.running and self._is_running is not None
+                      and not self._is_running(job.id))
+            if job.status == JobStatus.queued or orphan:
+                # Not started yet (the worker will skip it), or marked running with no worker on it
+                # (left over from a crash): nobody else will settle it, so settle it here.
                 finish(job, JobStatus.cancelled, "Cancelada")
                 self._jobs.save(job)
                 meeting = self._meetings.get(job.meeting_id)
@@ -107,16 +112,39 @@ class JobReporter:
         self._events.publish(self.job.id, {"type": status.value, "job": job_payload(self.job)})
 
 
+MAX_RESTARTS = 1
+CRASHED_ERROR = ("O programa parou no meio desta tarefa mais de uma vez (provavelmente falta de memória), "
+                 "então ela não foi retomada de novo. Tente outra vez ou use o modo Rápido.")
+
+
 def recover_interrupted_jobs(uow_factory: Callable[[], UnitOfWork], submit: Callable[[str], None]) -> int:
-    """After a restart, jobs left queued/running go back into the queue in their original order."""
+    """After a restart, jobs left queued/running go back into the queue in their original order.
+
+    A job found "running" was interrupted mid-way. It is retried once; if it was already retried, it
+    is probably what brought the process down (e.g. out of memory), and retrying it on every start
+    made a loop that the user could not cancel. Then it ends as an error.
+    """
     with uow_factory() as uow:
-        jobs = uow.jobs.list_active()
-        for job in jobs:
+        resumed = 0
+        for job in uow.jobs.list_active():
             if job.status == JobStatus.running:
+                restarts = int(job.params.get("restarts", 0) or 0)
+                if restarts >= MAX_RESTARTS:
+                    job.error = CRASHED_ERROR
+                    finish(job, JobStatus.error, "Falhou")
+                    uow.jobs.save(job)
+                    meeting = uow.meetings.get(job.meeting_id)
+                    if meeting is not None:
+                        meeting.status = MeetingStatus.error
+                        meeting.updated_at = utcnow()
+                        uow.meetings.save(meeting)
+                    continue
+                job.params = {**job.params, "restarts": restarts + 1}
                 job.status, job.progress, job.message = JobStatus.queued, 0.0, "Retomada após reinício"
                 uow.jobs.save(job)
             submit(job.id)
-        return len(jobs)
+            resumed += 1
+        return resumed
 
 
 def finish(job: Job, status: JobStatus, message: str) -> None:

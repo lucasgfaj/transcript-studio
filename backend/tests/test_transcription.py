@@ -122,3 +122,30 @@ def test_jobs_interrupted_by_a_restart_are_resumed(settings: Settings, transcrib
     with TestClient(create_app(settings, transcriber=transcriber, gpu=gpu)) as client:
         wait_for(client, "interrupted", "done")
         assert client.get(f"/api/meetings/{meeting['id']}").json()["has_transcript"] is True
+
+
+def test_a_job_that_keeps_crashing_the_process_is_not_resumed_forever(settings: Settings, transcriber: FakeTranscriber,
+                                                                     gpu: FakeGpu) -> None:
+    with TestClient(create_app(settings, transcriber=transcriber, gpu=gpu)) as client:
+        meeting = upload(client)
+    with Session(make_engine(settings)) as session:  # already resumed once, and found running again
+        session.add(Job(id="crashing", meeting_id=meeting["id"], kind=JobKind.transcribe, status=JobStatus.running,
+                        params={"mode": "detailed", "restarts": 1}))
+        session.commit()
+
+    with TestClient(create_app(settings, transcriber=transcriber, gpu=gpu)) as client:
+        job = wait_for(client, "crashing", "error")
+        assert "falta de memória" in job["error"]
+        assert client.get(f"/api/meetings/{meeting['id']}").json()["status"] == "error"
+        assert client.get("/api/jobs").json() == []
+        assert transcriber.calls == []
+
+
+def test_cancel_settles_a_running_job_that_no_worker_is_running(client: TestClient) -> None:
+    meeting = upload(client)
+    with Session(client.app.state.container.engine) as session:  # type: ignore[attr-defined]
+        session.add(Job(id="orphan", meeting_id=meeting["id"], kind=JobKind.transcribe, status=JobStatus.running))
+        session.commit()
+
+    assert client.post("/api/jobs/orphan/cancel").json()["status"] == "cancelled"
+    assert client.get(f"/api/meetings/{meeting['id']}").json()["status"] == "audio_ready"

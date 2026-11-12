@@ -17,6 +17,14 @@ from transcript_studio.domain.ports import (
 # Short files gain nothing from batching and pay its VAD/setup cost.
 _BATCH_MIN_SECONDS = 90
 
+# Long files go to Whisper in windows. The sequential mode computes the spectrogram of the whole
+# audio at once: 3.5 h needed more than 7 GB and the WSL killed the process (OOM). With 15-minute
+# windows memory stays at about the size of the decoded audio, and cancelling answers between windows.
+_SAMPLE_RATE = 16_000
+_WINDOW_SECONDS = 15 * 60
+_CUT_SEARCH_SECONDS = 20  # each window ends at the quietest moment of its last 20 s, not mid-word
+_CUT_FRAME = _SAMPLE_RATE // 10
+
 
 def _preload_pip_cuda_libraries() -> None:
     """ctranslate2 needs cuBLAS/cuDNN; load the pip-installed copies so LD_LIBRARY_PATH is not required."""
@@ -58,24 +66,37 @@ class FasterWhisperTranscriber:
                 "condition_on_previous_text": False,
             }
             duration = _duration(audio)
-            if mode == "fast" and batched is not None and duration >= _BATCH_MIN_SECONDS:
-                # Measured on an RTX 4050: 32 min in 26 s (75x) vs 59 s sequential, same text;
-                # segments follow the VAD chunks (up to ~30 s) instead of sentences.
-                segments, info = batched.transcribe(str(audio), batch_size=self._batch_size, **options)
-            else:
-                segments, info = model.transcribe(str(audio), vad_filter=True, **options)
-            collected: list[TranscribedSegment] = []
-            for segment in segments:  # lazy generator: decoding happens while iterating
-                if should_stop and should_stop():
-                    raise TranscriptionCancelled()
-                text = segment.text.strip()
-                if not text:
-                    continue
-                item = TranscribedSegment(start=float(segment.start), end=float(segment.end), text=text)
-                collected.append(item)
-                if on_segment:
-                    on_segment(item, info.duration)
-            return TranscriptionResult(segments=collected, duration=float(info.duration), language=info.language)
+            # Measured on an RTX 4050: 32 min in 26 s (75x) vs 59 s sequential, same text;
+            # segments follow the VAD chunks (up to ~30 s) instead of sentences.
+            use_batched = mode == "fast" and batched is not None and duration >= _BATCH_MIN_SECONDS
+
+            def run(source: Any) -> tuple[Any, Any]:
+                if use_batched:
+                    return batched.transcribe(source, batch_size=self._batch_size, **options)
+                return model.transcribe(source, vad_filter=True, **options)
+
+            if duration <= _WINDOW_SECONDS + _CUT_SEARCH_SECONDS:
+                segments, info = run(str(audio))
+                total = float(info.duration)
+                collected = _collect(segments, 0.0, total, on_segment, should_stop)
+                return TranscriptionResult(segments=collected, duration=total, language=info.language)
+
+            samples = _decode(audio)
+            total = len(samples) / _SAMPLE_RATE
+            collected = []
+            language = options["language"]
+            try:
+                for start, end in _windows(samples):
+                    if should_stop and should_stop():
+                        raise TranscriptionCancelled()
+                    segments, info = run(samples[start:end])
+                    if options["language"] is None:  # detect once, then keep it for the next windows
+                        options["language"] = language = info.language
+                    collected += _collect(segments, start / _SAMPLE_RATE, total, on_segment, should_stop)
+            finally:
+                del samples
+                gc.collect()
+            return TranscriptionResult(segments=collected, duration=total, language=language)
 
     def transcribe_samples(self, samples: Any, language: str | None = "pt", offset: float = 0.0,
                            prompt: str | None = None) -> list[TranscribedSegment]:
@@ -148,6 +169,49 @@ def is_downloaded(name: str) -> bool:
         return isinstance(try_to_load_from_cache(_MODELS.get(name, name), "model.bin"), str)
     except Exception:
         return False
+
+
+def _collect(segments: Any, offset: float, total: float, on_segment: OnSegment | None,
+             should_stop: ShouldStop | None) -> list[TranscribedSegment]:
+    collected: list[TranscribedSegment] = []
+    for segment in segments:  # lazy generator: decoding happens while iterating
+        if should_stop and should_stop():
+            raise TranscriptionCancelled()
+        text = segment.text.strip()
+        if not text:
+            continue
+        item = TranscribedSegment(start=offset + float(segment.start), end=offset + float(segment.end), text=text)
+        collected.append(item)
+        if on_segment:
+            on_segment(item, total)
+    return collected
+
+
+def _windows(samples: Any) -> list[tuple[int, int]]:
+    """Sample ranges of about _WINDOW_SECONDS each, cut at the quietest 0.1 s near the end of each one."""
+    import numpy as np
+
+    size, search, count = _WINDOW_SECONDS * _SAMPLE_RATE, _CUT_SEARCH_SECONDS * _SAMPLE_RATE, len(samples)
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    while start < count:
+        end = start + size
+        if end + search >= count:
+            ranges.append((start, count))
+            break
+        low = end - search
+        frames = samples[low:end].reshape(-1, _CUT_FRAME)
+        quietest = int(np.argmin(np.mean(np.square(frames, dtype=np.float32), axis=1)))
+        cut = low + quietest * _CUT_FRAME + _CUT_FRAME // 2
+        ranges.append((start, cut))
+        start = cut
+    return ranges
+
+
+def _decode(audio: Path) -> Any:
+    from faster_whisper.audio import decode_audio
+
+    return decode_audio(str(audio), sampling_rate=_SAMPLE_RATE)
 
 
 def _duration(audio: Path) -> float:

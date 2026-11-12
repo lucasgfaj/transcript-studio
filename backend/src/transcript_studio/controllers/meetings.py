@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
 
 from transcript_studio.core.dependencies import (
     ExportServiceDep, MeetingServiceDep, MinutesServiceDep, TranscriptServiceDep,
@@ -77,6 +78,14 @@ def upload_audio(meeting_id: str, service: MeetingServiceDep, file: UploadFile =
 def stream_audio(meeting_id: str, service: MeetingServiceDep) -> FileResponse:
     path, mime = service.audio_file(meeting_id)
     return FileResponse(path, media_type=mime)  # Starlette answers Range requests, so seeking works
+
+
+@router.get("/{meeting_id}/audio/download")
+def download_audio(meeting_id: str, service: MeetingServiceDep, start: Annotated[float | None, Query(ge=0)] = None,
+                   end: Annotated[float | None, Query(gt=0)] = None) -> FileResponse:
+    path, mime, filename, temporary = service.audio_download(meeting_id, start, end)
+    cleanup = BackgroundTask(path.unlink, missing_ok=True) if temporary else None
+    return FileResponse(path, media_type=mime, filename=filename, background=cleanup)
 
 
 @router.get("/{meeting_id}/audio/peaks", response_model=list[float])

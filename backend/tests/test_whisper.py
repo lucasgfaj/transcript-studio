@@ -157,3 +157,54 @@ def test_unreadable_audio_counts_as_zero_seconds(tmp_path: Path) -> None:
 
 def test_unknown_model_is_not_downloaded() -> None:
     assert whisper.is_downloaded("modelo-que-nao-existe") is False
+
+
+def long_audio(monkeypatch: pytest.MonkeyPatch, seconds: int) -> Any:
+    """Noise with a silent 0.1 s 5 s before each 15-minute mark, where the window should be cut."""
+    import numpy as np
+
+    rate = whisper._SAMPLE_RATE
+    samples = np.full(seconds * rate, 0.5, dtype=np.float32)
+    for mark in range(whisper._WINDOW_SECONDS, seconds, whisper._WINDOW_SECONDS):
+        quiet = (mark - 5) * rate
+        samples[quiet:quiet + rate // 10] = 0.0
+    use_duration(monkeypatch, seconds)
+    monkeypatch.setattr(whisper, "_decode", lambda audio: samples)
+    return samples
+
+
+@pytest.mark.parametrize("mode", ["fast", "detailed"])
+def test_long_audio_goes_in_windows_cut_at_silence(engine: Engine, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    hours = 3 * 3600
+    samples = long_audio(monkeypatch, hours)
+    seen: list[float] = []
+
+    result = FasterWhisperTranscriber().transcribe(Path("a.wav"), mode=mode,  # type: ignore[arg-type]
+                                                   on_segment=lambda segment, total: seen.append(total))
+
+    windows = whisper._windows(samples)
+    assert len(engine.calls) == len(windows) and 12 <= len(windows) <= 13  # cuts drift a little earlier
+    assert windows[0] == (0, (whisper._WINDOW_SECONDS - 5) * whisper._SAMPLE_RATE + whisper._CUT_FRAME // 2)
+    assert windows[-1][1] == len(samples) and all(a[1] == b[0] for a, b in zip(windows, windows[1:]))
+    assert all(len(options["audio"]) <= (whisper._WINDOW_SECONDS + whisper._CUT_SEARCH_SECONDS) * whisper._SAMPLE_RATE
+               for _kind, options in engine.calls)
+    offset = windows[1][0] / whisper._SAMPLE_RATE
+    assert (result.segments[2].start, result.segments[2].text) == (offset, "Bom dia.")
+    assert result.duration == hours and set(seen) == {hours}
+
+
+def test_long_audio_detects_the_language_once(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    long_audio(monkeypatch, 40 * 60)
+    result = FasterWhisperTranscriber().transcribe(Path("a.wav"), language=None)
+
+    assert [options["language"] for _kind, options in engine.calls] == [None, "pt", "pt"]
+    assert result.language == "pt"
+
+
+def test_long_audio_cancels_between_windows(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
+    long_audio(monkeypatch, 3600)
+    engine.segments = []  # no segment to check the flag on: only the window loop can stop it
+    asked = iter([False, True])
+    with pytest.raises(TranscriptionCancelled):
+        FasterWhisperTranscriber().transcribe(Path("a.wav"), should_stop=lambda: next(asked))
+    assert len(engine.calls) == 1

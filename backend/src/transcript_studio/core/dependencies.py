@@ -85,7 +85,8 @@ PreferencesDep = Annotated[PreferencesService, Depends(get_preferences)]
 def get_job_service(session: SessionDep, meetings: MeetingServiceDep, container: ContainerDep,
                     preferences: PreferencesDep) -> JobService:
     return JobService(SqlJobRepository(session), SqlMinutesRepository(session), meetings, container.worker.submit,
-                      container.worker.cancel, preferences.get().default_llm)
+                      container.worker.cancel, preferences.get().default_llm,
+                      is_running=lambda job_id: container.worker.current == job_id)
 
 
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]

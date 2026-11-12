@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import BinaryIO
 
-from transcript_studio.domain.errors import NotFoundError
+from transcript_studio.domain.errors import InvalidAudioError, NotFoundError
 from transcript_studio.domain.ports import AudioStorage, MeetingRepository, MinutesRepository, WaveformProvider
 from transcript_studio.models import Meeting, MeetingSource, MeetingStatus, utcnow
 from transcript_studio.schemas.meeting import MeetingCreate, MeetingRead, MeetingUpdate
@@ -84,6 +84,25 @@ class MeetingService:
             raise NotFoundError("Esta reunião não tem áudio.")
         return path, meeting.audio_mime or "application/octet-stream"
 
+    def audio_download(self, meeting_id: str, start: float | None = None,
+                       end: float | None = None) -> tuple[Path, str, str, bool]:
+        """(path, mime, download name, is_temporary). With start/end, a cut copy; the original stays as is."""
+        meeting = self.get(meeting_id)
+        path, mime = self.audio_file(meeting_id)
+        extension = path.suffix
+        name = _slug(meeting.title)
+        if start is None and end is None:
+            return path, mime, f"{name}{extension}", False
+        duration = meeting.audio_duration or 0.0
+        begin = max(start or 0.0, 0.0)
+        finish = end if end is not None else duration
+        if duration:
+            finish = min(finish, duration)
+        if finish - begin < 0.5:
+            raise InvalidAudioError("O fim do corte precisa vir depois do início (meio segundo, no mínimo).")
+        clip = self._audio.clip(meeting.id, path.name, begin, finish)
+        return clip, mime, f"{name}_{_stamp(begin)}-{_stamp(finish)}{extension}", True
+
     def waveform(self, meeting_id: str) -> list[float]:
         path, _mime = self.audio_file(meeting_id)
         return self._waveform.peaks(path)
@@ -105,3 +124,14 @@ def to_read(meeting: Meeting, has_minutes: bool) -> MeetingRead:
 
 def clean_names(names: list[str]) -> list[str]:
     return [name.strip() for name in names if name and name.strip()]
+
+
+def _slug(title: str) -> str:
+    cleaned = "".join(char if char.isalnum() or char in " -_" else " " for char in title)
+    return "-".join(cleaned.split())[:80] or "audio"
+
+
+def _stamp(seconds: float) -> str:
+    total = int(seconds)
+    hours, minutes, secs = total // 3600, total % 3600 // 60, total % 60
+    return f"{hours}h{minutes:02d}m{secs:02d}s" if hours else f"{minutes:02d}m{secs:02d}s"

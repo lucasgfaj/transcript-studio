@@ -280,6 +280,8 @@ export const api = {
     request<Job>(`/api/meetings/${id}/minutes/generate`, { method: "POST", body: JSON.stringify({ model }) }),
   minutesVersion: (id: string, versionId: number) =>
     request<MinutesVersion & { markdown: string }>(`/api/meetings/${id}/minutes/${versionId}`),
+  audioDownloadUrl: (id: string, range?: { start: number; end: number }) =>
+    `/api/meetings/${id}/audio/download${range ? `?start=${range.start}&end=${range.end}` : ""}`,
   exportUrl: (id: string, format: "md" | "docx" | "txt" | "srt") => `/api/meetings/${id}/export?format=${format}`,
   models: () => request<ModelsInfo>("/api/models"),
   deleteModel: (name: string) => request<void>(`/api/models/${encodeURIComponent(name)}`, { method: "DELETE" }),

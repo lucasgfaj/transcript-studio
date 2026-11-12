@@ -83,3 +83,22 @@ def test_update_cleans_participants(client: TestClient) -> None:
     meeting_id = create(client)
     updated = client.patch(f"/api/meetings/{meeting_id}", json={"participants": [" Ana ", "", "Bruno"]}).json()
     assert updated["participants"] == ["Ana", "Bruno"]
+
+
+def test_download_whole_audio_or_a_clip_keeps_the_original(client: TestClient, tmp_path: Path) -> None:
+    meeting_id = create(client)
+    client.put(f"/api/meetings/{meeting_id}/audio", files={"file": ("a.wav", make_wav(4.0), "audio/wav")})
+
+    whole = client.get(f"/api/meetings/{meeting_id}/audio/download")
+    assert whole.status_code == 200 and whole.headers["content-disposition"].startswith("attachment")
+    assert len(whole.content) == len(make_wav(4.0))
+
+    clip = client.get(f"/api/meetings/{meeting_id}/audio/download", params={"start": 1, "end": 3})
+    assert clip.status_code == 200
+    assert "00m01s-00m03s.wav" in clip.headers["content-disposition"]
+    saved = tmp_path / "clip.wav"
+    saved.write_bytes(clip.content)
+    assert abs(probe_duration(saved) - 2.0) < 0.1
+
+    assert client.get(f"/api/meetings/{meeting_id}").json()["audio_duration"] == pytest.approx(4.0, abs=0.05)
+    assert client.get(f"/api/meetings/{meeting_id}/audio/download", params={"start": 3, "end": 2}).status_code == 422
